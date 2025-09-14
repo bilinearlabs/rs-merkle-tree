@@ -1,0 +1,34 @@
+[package]
+name = "rs-merkle-tree"
+version = "0.1.0"
+edition = "2021"
+proc-macro = true
+
+[lib]
+name = "rs_merkle_tree"
+path = "src/lib.rs"
+
+[dev-dependencies]
+criterion = { version = "0.5", features = ["async_tokio"] }
+mockall = "0.12"
+proptest = "1.4"
+test-case = "3.3"
+
+[[bench]]
+name = "benchmarks"
+harness = false
+
+[dependencies]
+tokio = { version = "1", features = ["full"] }
+rand = "0.8.4" # Use the latest version available
+futures = "0.3"
+syn = { version = "1.0.107", features = ["full"] }
+quote = "1.0.23"
+
+sled = "0.34"
+rusqlite = { version = "0.29", features = ["bundled"] }
+alloy = { version = "1.0.9", features = [
+    "std"
+] }
+byteorder = "1.4"
+thiserror = "2.0.16"
