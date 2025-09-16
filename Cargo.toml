@@ -24,9 +24,8 @@ rand = "0.8.4" # Use the latest version available
 futures = "0.3"
 syn = { version = "1.0.107", features = ["full"] }
 quote = "1.0.23"
-
 sled = "0.34"
-rusqlite = { version = "0.29", features = ["bundled"] }
+rusqlite = { version = "0.37", features = ["bundled"] }
 alloy = { version = "1.0.9", features = [
     "std"
 ] }

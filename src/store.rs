@@ -1,5 +1,6 @@
 use crate::errors::MerkleError;
 use crate::node::Node;
+use rusqlite::{params, Connection, OptionalExtension};
 use sled::{Batch, Db};
 use std::collections::HashMap;
 use std::result::Result;
@@ -135,6 +136,129 @@ impl Store for SledStore {
         self.db.apply_batch(batch).map_err(Self::db_error)?;
         self.num_leaves += counter as u64;
 
+        Ok(())
+    }
+
+    fn get_num_leaves(&self) -> u64 {
+        self.num_leaves
+    }
+}
+
+pub struct SqliteStore {
+    conn: Connection,
+    // Keeping an in-memory counter to avoid querying on every access.
+    num_leaves: u64,
+}
+
+impl SqliteStore {
+    const KEY_NUM_LEAVES: &'static str = "NUM_LEAVES";
+
+    fn db_error<E: std::fmt::Display>(err: E) -> MerkleError {
+        MerkleError::StoreError(err.to_string())
+    }
+
+    fn decode_node(bytes: &[u8]) -> Result<Node, MerkleError> {
+        if bytes.len() != Node::LEN {
+            return Err(MerkleError::StoreError("invalid node length".to_string()));
+        }
+        let mut arr = [0u8; Node::LEN];
+        arr.copy_from_slice(bytes);
+        Ok(Node::from(arr))
+    }
+
+    // Use ":memory:" for in-memory database.
+    pub fn new(file_path: &str) -> Self {
+        let conn = Connection::open(file_path).expect("failed to open sqlite DB");
+
+        conn.execute_batch("PRAGMA journal_mode = WAL;\nPRAGMA synchronous = NORMAL;")
+            .expect("failed to set WAL mode and synchronous pragma");
+
+        // Create schema if not exists.
+        conn.execute_batch(
+            "BEGIN;
+             CREATE TABLE IF NOT EXISTS nodes (
+                 level INTEGER NOT NULL,
+                 idx   INTEGER NOT NULL,
+                 node  BLOB    NOT NULL CHECK(length(node) = 32),
+                 PRIMARY KEY(level, idx)
+             );
+             CREATE TABLE IF NOT EXISTS metadata (
+                 key   TEXT PRIMARY KEY,
+                 value BLOB NOT NULL
+             );
+             COMMIT;",
+        )
+        .expect("failed to create tables");
+
+        // Load persisted leaf count or default to 0.
+        let num_leaves: u64 = conn
+            .query_row(
+                "SELECT value FROM metadata WHERE key = ?1",
+                params![Self::KEY_NUM_LEAVES],
+                |row| {
+                    let data: Vec<u8> = row.get(0)?;
+                    if data.len() != 8 {
+                        return Err(rusqlite::Error::InvalidQuery);
+                    }
+                    let mut arr = [0u8; 8];
+                    arr.copy_from_slice(&data);
+                    Ok(u64::from_be_bytes(arr))
+                },
+            )
+            .optional()
+            .expect("failed to query metadata")
+            .unwrap_or(0);
+
+        // TODO: Ensure if we load 0 that the db is cleared.
+        // Otherwise it wont be consistent.
+
+        Self { conn, num_leaves }
+    }
+}
+
+impl Store for SqliteStore {
+    fn get(&self, level: u32, index: u64) -> Result<Option<Node>, MerkleError> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT node FROM nodes WHERE level = ?1 AND idx = ?2")
+            .map_err(Self::db_error)?;
+        let res: Option<Vec<u8>> = stmt
+            .query_row(params![level as i64, index as i64], |row| row.get(0))
+            .optional()
+            .map_err(Self::db_error)?;
+        Ok(res.map(|bytes| Self::decode_node(&bytes)).transpose()?)
+    }
+
+    fn put(&mut self, items: &[(u32, u64, Node)]) -> Result<(), MerkleError> {
+        let tx = self.conn.transaction().map_err(Self::db_error)?;
+
+        {
+            let mut insert_stmt = tx
+                .prepare_cached(
+                    "INSERT OR REPLACE INTO nodes (level, idx, node) VALUES (?1, ?2, ?3)",
+                )
+                .map_err(Self::db_error)?;
+
+            for (level, index, node) in items {
+                insert_stmt
+                    .execute(params![*level as i64, *index as i64, node.as_ref()])
+                    .map_err(Self::db_error)?;
+            }
+        }
+
+        let counter = items.iter().filter(|(level, _, _)| *level == 0).count() as u64;
+        if counter > 0 {
+            let new_leaves = self.num_leaves + counter;
+            tx.execute(
+                "INSERT OR REPLACE INTO metadata (key, value) VALUES (?1, ?2)",
+                params![Self::KEY_NUM_LEAVES, new_leaves.to_be_bytes().to_vec()],
+            )
+            .map_err(Self::db_error)?;
+
+            self.num_leaves = new_leaves;
+        }
+
+        tx.commit().map_err(Self::db_error)?;
         Ok(())
     }
 

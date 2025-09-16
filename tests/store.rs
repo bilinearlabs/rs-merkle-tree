@@ -1,18 +1,17 @@
 use rs_merkle_tree::{
     node::Node,
-    store::{MemoryStore, SledStore, Store},
+    store::{MemoryStore, SledStore, SqliteStore, Store},
     to_node,
 };
 use std::fs;
 
 #[test]
 fn test_stores() {
-    fs::remove_dir_all("sled.db").ok();
-
     // Test all implemented stores
     let stores: Vec<Box<dyn Store>> = vec![
         Box::new(MemoryStore::new()),
         Box::new(SledStore::new("sled.db", true)),
+        Box::new(SqliteStore::new("sqlite.db")),
     ];
 
     for mut store in stores {

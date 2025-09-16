@@ -1,54 +1,59 @@
 use criterion::black_box;
-use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
-use rs_merkle_tree::node::Node;
-use rs_merkle_tree::store::MemoryStore;
-use rs_merkle_tree::{hasher::Keccak256Hasher, store::SledStore, tree::GenericMerkleTree};
+use criterion::{criterion_group, criterion_main, Bencher, BenchmarkId, Criterion, Throughput};
+use rs_merkle_tree::store::{MemoryStore, SledStore, SqliteStore, Store};
+use rs_merkle_tree::{hasher::Keccak256Hasher, node::Node, tree::GenericMerkleTree};
+
+// Constants for the benchmarks
+const TOTAL_INSERTS: usize = 5_000;
+const BATCH_SIZE: usize = 1_000;
+
+// Helper
+fn bench_store<S: Store + 'static, const DEPTH: usize, F>(b: &mut Bencher, mut make_store: F)
+where
+    F: FnMut() -> S,
+{
+    b.iter(|| {
+        let mut tree: GenericMerkleTree<Keccak256Hasher, S, DEPTH> =
+            GenericMerkleTree::new(Keccak256Hasher, make_store());
+
+        let num_batches = TOTAL_INSERTS / BATCH_SIZE;
+        for _ in 0..num_batches {
+            let leaves: Vec<Node> = (0..BATCH_SIZE).map(|_| black_box(Node::random())).collect();
+            tree.add_leaves(&leaves).unwrap();
+        }
+    });
+}
 
 fn bench_insertions(c: &mut Criterion) {
-    std::fs::remove_dir_all("sled.db").ok();
-    let mut group = c.benchmark_group("sled_store");
-    let total_inserts = 5_000;
-    let batch_size = 1_000;
+    // Clean previous runs
+    let _ = std::fs::remove_dir_all("sled.db");
+    let _ = std::fs::remove_file("sqlite.db");
 
-    group.throughput(Throughput::Elements(total_inserts));
-    group.bench_function(
-        BenchmarkId::new("sled_store_test", "add_leaves_keccak_depth_32"),
-        |b| {
-            b.iter(|| {
-                let mut tree: GenericMerkleTree<Keccak256Hasher, SledStore, 32> =
-                    GenericMerkleTree::new(Keccak256Hasher, SledStore::new("sled.db", false));
+    let mut group = c.benchmark_group("merkle_store_inserts");
+    group.throughput(Throughput::Elements(TOTAL_INSERTS as u64));
+    group.sample_size(10);
 
-                let num_batches = total_inserts / batch_size;
+    // Depth 20 benchmarks
+    group.bench_function(BenchmarkId::new("sqlite_store", "depth_20"), |b| {
+        bench_store::<SqliteStore, 20, _>(b, || SqliteStore::new("sqlite.db"))
+    });
+    group.bench_function(BenchmarkId::new("sled_store", "depth_20"), |b| {
+        bench_store::<SledStore, 20, _>(b, || SledStore::new("sled.db", false))
+    });
+    group.bench_function(BenchmarkId::new("memory_store", "depth_20"), |b| {
+        bench_store::<MemoryStore, 20, _>(b, || MemoryStore::new())
+    });
 
-                for _ in 0..num_batches {
-                    let leaves: Vec<Node> =
-                        (0..batch_size).map(|_| black_box(Node::random())).collect();
-                    tree.add_leaves(&leaves).unwrap();
-                }
-            });
-        },
-    );
-    group.finish();
-
-    let mut group = c.benchmark_group("memory_store");
-    group.throughput(Throughput::Elements(total_inserts));
-    group.bench_function(
-        BenchmarkId::new("memory_store", "add_leaves_keccak_depth_32"),
-        |b| {
-            b.iter(|| {
-                let mut tree: GenericMerkleTree<Keccak256Hasher, MemoryStore, 32> =
-                    GenericMerkleTree::new(Keccak256Hasher, MemoryStore::new());
-
-                let num_batches = total_inserts / batch_size;
-
-                for _ in 0..num_batches {
-                    let leaves: Vec<Node> =
-                        (0..batch_size).map(|_| black_box(Node::random())).collect();
-                    tree.add_leaves(&leaves).unwrap();
-                }
-            });
-        },
-    );
+    // Depth 32 benchmarks
+    group.bench_function(BenchmarkId::new("sqlite_store", "depth_32"), |b| {
+        bench_store::<SqliteStore, 32, _>(b, || SqliteStore::new("sqlite.db"))
+    });
+    group.bench_function(BenchmarkId::new("sled_store", "depth_32"), |b| {
+        bench_store::<SledStore, 32, _>(b, || SledStore::new("sled.db", false))
+    });
+    group.bench_function(BenchmarkId::new("memory_store", "depth_32"), |b| {
+        bench_store::<MemoryStore, 32, _>(b, || MemoryStore::new())
+    });
 
     group.finish();
 }
