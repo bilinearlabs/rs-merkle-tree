@@ -26,8 +26,6 @@ syn = { version = "1.0.107", features = ["full"] }
 quote = "1.0.23"
 sled = "0.34"
 rusqlite = { version = "0.37", features = ["bundled"] }
-alloy = { version = "1.0.9", features = [
-    "std"
-] }
+tiny-keccak = { version = "2.0", features = ["keccak"] }
 byteorder = "1.4"
 thiserror = "2.0.16"

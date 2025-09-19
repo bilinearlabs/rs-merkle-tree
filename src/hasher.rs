@@ -1,5 +1,5 @@
 use crate::node::Node;
-use alloy::primitives::keccak256;
+use tiny_keccak::{Hasher, Keccak};
 
 pub trait TreeHasher {
     fn hash(&self, left: &Node, right: &Node) -> Node;
@@ -9,10 +9,13 @@ pub trait TreeHasher {
 pub struct Keccak256Hasher;
 impl TreeHasher for Keccak256Hasher {
     fn hash(&self, left: &Node, right: &Node) -> Node {
-        let mut buf = [0u8; 64];
-        buf[..32].copy_from_slice(left.as_ref());
-        buf[32..].copy_from_slice(right.as_ref());
-        Node::from(keccak256(buf).0)
+        // TODO: Don't instantiate a new keccak for each hash.
+        let mut keccak = Keccak::v256();
+        keccak.update(left.as_ref());
+        keccak.update(right.as_ref());
+        let mut buf = [0u8; 32];
+        keccak.finalize(&mut buf);
+        Node::from(buf)
     }
 }
 
