@@ -69,11 +69,10 @@ impl SledStore {
     }
 
     fn decode_node(bytes: &[u8]) -> Result<Node, MerkleError> {
-        if bytes.len() != Node::LEN {
-            return Err(MerkleError::StoreError("invalid node length".to_string()));
-        }
-        let mut arr = [0u8; Node::LEN];
-        arr.copy_from_slice(bytes);
+        // TODO: Options to allow zero copy? Eg using lifetimes on Node?
+        let arr: [u8; Node::LEN] = bytes
+            .try_into()
+            .map_err(|_| MerkleError::StoreError("invalid node length".into()))?;
         Ok(Node::from(arr))
     }
 }
@@ -158,11 +157,9 @@ impl SqliteStore {
     }
 
     fn decode_node(bytes: &[u8]) -> Result<Node, MerkleError> {
-        if bytes.len() != Node::LEN {
-            return Err(MerkleError::StoreError("invalid node length".to_string()));
-        }
-        let mut arr = [0u8; Node::LEN];
-        arr.copy_from_slice(bytes);
+        let arr: [u8; Node::LEN] = bytes
+            .try_into()
+            .map_err(|_| MerkleError::StoreError("invalid node length".into()))?;
         Ok(Node::from(arr))
     }
 
@@ -190,27 +187,29 @@ impl SqliteStore {
         )
         .expect("failed to create tables");
 
-        // Load persisted leaf count or default to 0.
+        // Load persisted leaf count
         let num_leaves: u64 = conn
             .query_row(
                 "SELECT value FROM metadata WHERE key = ?1",
                 params![Self::KEY_NUM_LEAVES],
                 |row| {
-                    let data: Vec<u8> = row.get(0)?;
-                    if data.len() != 8 {
-                        return Err(rusqlite::Error::InvalidQuery);
-                    }
-                    let mut arr = [0u8; 8];
-                    arr.copy_from_slice(&data);
-                    Ok(u64::from_be_bytes(arr))
+                    let bytes: [u8; 8] = row
+                        .get::<_, Vec<u8>>(0)?
+                        .as_slice()
+                        .try_into()
+                        .map_err(|_| rusqlite::Error::InvalidQuery)?;
+                    Ok(u64::from_be_bytes(bytes))
                 },
             )
             .optional()
-            .expect("failed to query metadata")
+            .expect("failed to query num leaves")
             .unwrap_or(0);
 
-        // TODO: Ensure if we load 0 that the db is cleared.
-        // Otherwise it wont be consistent.
+        // If the count is 0, clear the db, just in case.
+        if num_leaves == 0 {
+            conn.execute_batch("DELETE FROM nodes; DELETE FROM metadata;")
+                .expect("failed to clear inconsistent DB state");
+        }
 
         Self { conn, num_leaves }
     }
