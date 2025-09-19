@@ -63,6 +63,7 @@ fn test_merkle_tree_keccak_32_memory() {
 }
 
 #[test]
+#[ignore = "run it on demand, slow and takes some disk space"]
 fn test_disk_space() {
     // Not a test per sec but benchmarks the size of a tree of depth 32 and 1M leaves.
     fs::remove_dir_all("sled.db").ok();
