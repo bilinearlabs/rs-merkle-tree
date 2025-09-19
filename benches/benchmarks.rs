@@ -25,35 +25,42 @@ where
 }
 
 fn bench_insertions(c: &mut Criterion) {
-    // Clean previous runs
-    let _ = std::fs::remove_dir_all("sled.db");
-    let _ = std::fs::remove_file("sqlite.db");
-
     let mut group = c.benchmark_group("merkle_store_inserts");
     group.throughput(Throughput::Elements(TOTAL_INSERTS as u64));
     group.sample_size(10);
 
     // Depth 20 benchmarks
     group.bench_function(BenchmarkId::new("sqlite_store", "depth_20"), |b| {
+        let _ = std::fs::remove_file("sqlite.db");
         bench_store::<SqliteStore, 20, _>(b, || SqliteStore::new("sqlite.db"))
     });
     group.bench_function(BenchmarkId::new("sled_store", "depth_20"), |b| {
+        let _ = std::fs::remove_dir_all("sled.db");
         bench_store::<SledStore, 20, _>(b, || SledStore::new("sled.db", false))
     });
     group.bench_function(BenchmarkId::new("memory_store", "depth_20"), |b| {
         bench_store::<MemoryStore, 20, _>(b, || MemoryStore::new())
     });
 
+    // TODO: Find a clearner way to do this.
+    let _ = std::fs::remove_file("sqlite.db");
+    let _ = std::fs::remove_dir_all("sled.db");
+
     // Depth 32 benchmarks
     group.bench_function(BenchmarkId::new("sqlite_store", "depth_32"), |b| {
+        let _ = std::fs::remove_file("sqlite.db");
         bench_store::<SqliteStore, 32, _>(b, || SqliteStore::new("sqlite.db"))
     });
     group.bench_function(BenchmarkId::new("sled_store", "depth_32"), |b| {
+        let _ = std::fs::remove_dir_all("sled.db");
         bench_store::<SledStore, 32, _>(b, || SledStore::new("sled.db", false))
     });
     group.bench_function(BenchmarkId::new("memory_store", "depth_32"), |b| {
         bench_store::<MemoryStore, 32, _>(b, || MemoryStore::new())
     });
+
+    let _ = std::fs::remove_file("sqlite.db");
+    let _ = std::fs::remove_dir_all("sled.db");
 
     group.finish();
 }
