@@ -1,6 +1,6 @@
 use rs_merkle_tree::{
     node::Node,
-    store::{MemoryStore, SledStore, SqliteStore, Store},
+    store::{MemoryStore, RocksDbStore, SledStore, SqliteStore, Store},
     to_node,
 };
 use std::fs;
@@ -12,6 +12,7 @@ fn test_stores() {
         Box::new(MemoryStore::new()),
         Box::new(SledStore::new("sled.db", true)),
         Box::new(SqliteStore::new("sqlite.db")),
+        Box::new(RocksDbStore::new("rocksdb.db")),
     ];
 
     for mut store in stores {

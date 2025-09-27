@@ -17,7 +17,7 @@ pub struct MerkleProof<const Depth: usize> {
     pub root: Node,
 }
 
-pub struct GenericMerkleTree<H, S, const Depth: usize>
+pub struct MerkleTree<H, S, const Depth: usize>
 where
     H: TreeHasher,
     S: Store,
@@ -28,7 +28,7 @@ where
 }
 
 // Type alias for common configuration
-pub type MerkleTree32 = GenericMerkleTree<Keccak256Hasher, MemoryStore, 32>;
+pub type MerkleTree32 = MerkleTree<Keccak256Hasher, MemoryStore, 32>;
 
 // Default tree with common configuration
 impl Default for MerkleTree32 {
@@ -59,7 +59,7 @@ impl<const Depth: usize> Index<usize> for Zeros<Depth> {
 
 // TODO: Implement send and sync so that the tree can be used in a concurrent context
 
-impl<H, S, const Depth: usize> GenericMerkleTree<H, S, Depth>
+impl<H, S, const Depth: usize> MerkleTree<H, S, Depth>
 where
     H: TreeHasher,
     S: Store,
@@ -223,7 +223,7 @@ mod tests {
     fn test_zero_keccak_32() {
         let hasher = Keccak256Hasher;
         let store = MemoryStore::new();
-        let tree: MerkleTree32 = GenericMerkleTree::new(hasher, store);
+        let tree: MerkleTree32 = MerkleTree::new(hasher, store);
 
         // Test vector of expected zeros at each level.
         // Depth: 32
@@ -274,7 +274,7 @@ mod tests {
     fn test_tree_full_error() {
         let hasher = Keccak256Hasher;
         let store = MemoryStore::new();
-        let mut tree = GenericMerkleTree::<Keccak256Hasher, MemoryStore, 3>::new(hasher, store);
+        let mut tree = MerkleTree::<Keccak256Hasher, MemoryStore, 3>::new(hasher, store);
 
         tree.add_leaves(&(0..8).map(|_| Node::ZERO).collect::<Vec<Node>>())
             .unwrap();
