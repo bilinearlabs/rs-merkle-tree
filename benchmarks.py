@@ -1,0 +1,115 @@
+import re
+import subprocess
+import shlex
+from pathlib import Path
+from typing import Iterable, List, Tuple
+
+# store, depth, num_leaves, size_mib
+DiskRow = Tuple[str, int, int, float]
+
+def _parse_disk_space(lines: Iterable[str]) -> List[DiskRow]:
+    pattern = re.compile(
+        r"store\s+(?P<file>\S+)\s+depth\s+(?P<depth>\d+)\s+num_leaves\s+"
+        r"(?P<leaves>\d+)\s+size:\s+(?P<size>[\d.]+)\s+MiB",
+        re.IGNORECASE,
+    )
+    rows: List[DiskRow] = []
+    for line in lines:
+        if (m := pattern.search(line)) is None:
+            continue
+        file_name: str = m.group("file")
+        store = Path(file_name).stem
+        depth = int(m.group("depth"))
+        leaves = int(m.group("leaves"))
+        size_mib = float(m.group("size"))
+        rows.append((store, depth, leaves, size_mib))
+    return rows
+
+
+def _disk_table(rows: List[DiskRow]) -> str:
+    header = "| Store | Depth | Leaves | Size (MiB) |\n" + "|---|---|---|---|"
+    body = "\n".join(
+        f"| {store} | {depth} | {leaves} | {size:.2f} |"
+        for store, depth, leaves, size in rows
+    )
+    return f"{header}\n{body}"
+
+# depth, hash, store, kelem_per_sec
+BenchRow = Tuple[int, str, str, float]
+
+# "inserts/sqlite_store/depth32_keccak256"
+_BENCH_NAME_RE = re.compile(
+    r"inserts/(?P<store>[a-zA-Z0-9]+)_store/" r"depth(?P<depth>\d+)_(?P<hash>[a-zA-Z0-9]+)",
+)
+# [10.420 Kelem/s 10.444 Kelem/s 10.468 Kelem/s]"
+_THRPT_RE = re.compile(
+    r"thrpt:\s*\[\s*(?P<low>[\d.]+)\s+Kelem/s\s+(?P<mid>[\d.]+)\s+Kelem/s\s+(?P<high>[\d.]+)\s+Kelem/s"  # noqa: W605
+)
+
+
+def _parse_bench(lines: Iterable[str]) -> List[BenchRow]:
+    rows: List[BenchRow] = []
+    # depth, hash, store
+    current: tuple[int, str, str] | None = None
+
+    for line in lines:
+        if m := _BENCH_NAME_RE.search(line):
+            store = m.group("store")
+            depth = int(m.group("depth"))
+            hash_alg = m.group("hash")
+            current = (depth, hash_alg, store)
+            continue
+
+        if current and (thrpt_m := _THRPT_RE.search(line)):
+            kelem_s = float(thrpt_m.group("mid"))
+            depth, hash_alg, store = current
+            rows.append((depth, hash_alg, store, kelem_s))
+            current = None
+
+    rows.sort(key=lambda row: row[3])
+    return rows
+
+
+def _bench_table(rows: List[BenchRow]) -> str:
+    header = "| Depth | Hash | Store | Throughput (Kelem/s) |\n" + "|---|---|---|---|"
+    body = "\n".join(
+        f"| {depth} | {hash_alg} | {store} | {kelem:.3f} |"
+        for depth, hash_alg, store, kelem in rows
+    )
+    return f"{header}\n{body}"
+
+def _run(cmd: str | list[str]) -> list[str]:
+    if isinstance(cmd, str):
+        full_cmd = cmd
+        cmd_list = shlex.split(cmd)
+    else:
+        cmd_list = cmd
+        full_cmd = " ".join(cmd)
+
+    result = subprocess.run(cmd_list, check=True, capture_output=True, text=True)
+    return (result.stdout + result.stderr).splitlines()
+
+
+def main() -> None:
+    # Run disk-space test
+    disk_lines = _run("cargo test --release test_disk_space -- --ignored --no-capture")
+
+    print("## Benchmarks\n")
+
+    disk_rows = _parse_disk_space(disk_lines)
+    if disk_rows:
+        print("### Disk space usage\n")
+        print(_disk_table(disk_rows))
+        print()
+
+    # Run benches
+    bench_lines = _run("cargo bench")
+
+    bench_rows = _parse_bench(bench_lines)
+    if bench_rows:
+        print("### Insertion throughput\n")
+        print(_bench_table(bench_rows))
+
+
+if __name__ == "__main__":
+    main()
