@@ -55,7 +55,8 @@ The following stores are supported:
 ## Hash functions
 
 The following hash functions are supported:
-* keccak256
+* [keccak256](https://github.com/debris/tiny-keccak)
+* [Poseidon BN254 Circom T3](https://github.com/Lightprotocol/light-poseidon/)
 
 ## Benchmarks
 

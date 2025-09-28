@@ -1,6 +1,6 @@
 use crate::errors::MerkleError;
+use crate::hasher::Hasher;
 use crate::hasher::Keccak256Hasher;
-use crate::hasher::TreeHasher;
 use crate::store::MemoryStore;
 use crate::store::Store;
 use crate::{node::Node, to_node};
@@ -19,7 +19,7 @@ pub struct MerkleProof<const Depth: usize> {
 
 pub struct MerkleTree<H, S, const Depth: usize>
 where
-    H: TreeHasher,
+    H: Hasher,
     S: Store,
 {
     hasher: H,
@@ -61,7 +61,7 @@ impl<const Depth: usize> Index<usize> for Zeros<Depth> {
 
 impl<H, S, const Depth: usize> MerkleTree<H, S, Depth>
 where
-    H: TreeHasher,
+    H: Hasher,
     S: Store,
 {
     pub fn new(hasher: H, store: S) -> Self {
@@ -217,6 +217,8 @@ where
 
 #[cfg(test)]
 mod tests {
+    use crate::hasher::PoseidonHasher;
+
     use super::*;
 
     #[test]
@@ -262,6 +264,59 @@ mod tests {
             to_node!("0x93237c50ba75ee485f4c22adf2f741400bdf8d6a9cc7df7ecae576221665d735"),
             to_node!("0x8448818bb4ae4562849e949e17ac16e0be16688e156b5cf15e098c627c0056a9"),
             to_node!("0x27ae5ba08d7291c96c8cbddcc148bf48a6d68c7974b94356f53754ef6171d757"),
+        ];
+
+        for (i, zero) in tree.zeros.front.iter().enumerate() {
+            assert_eq!(zero, &expected_zeros[i]);
+        }
+        assert_eq!(tree.zeros.last, expected_zeros[32]);
+    }
+
+    #[test]
+    fn test_zero_poseidon_32() {
+        let hasher = PoseidonHasher;
+        let store = MemoryStore::new();
+        let tree = MerkleTree::<PoseidonHasher, MemoryStore, 32>::new(hasher, store);
+
+        // Test vector of expected zeros at each level.
+        // Depth: 32
+        // Hashing: Poseidon
+        // See. Note in int not hex
+        // https://github.com/zk-kit/zk-kit.solidity/blob/lean-imt.sol-v2.0.1/packages/lazy-imt/contracts/InternalLazyIMT.sol#L16-L48
+        let expected_zeros = [
+            to_node!("0x0000000000000000000000000000000000000000000000000000000000000000"),
+            to_node!("0x2098f5fb9e239eab3ceac3f27b81e481dc3124d55ffed523a839ee8446b64864"),
+            to_node!("0x1069673dcdb12263df301a6ff584a7ec261a44cb9dc68df067a4774460b1f1e1"),
+            to_node!("0x18f43331537ee2af2e3d758d50f72106467c6eea50371dd528d57eb2b856d238"),
+            to_node!("0x07f9d837cb17b0d36320ffe93ba52345f1b728571a568265caac97559dbc952a"),
+            to_node!("0x2b94cf5e8746b3f5c9631f4c5df32907a699c58c94b2ad4d7b5cec1639183f55"),
+            to_node!("0x2dee93c5a666459646ea7d22cca9e1bcfed71e6951b953611d11dda32ea09d78"),
+            to_node!("0x078295e5a22b84e982cf601eb639597b8b0515a88cb5ac7fa8a4aabe3c87349d"),
+            to_node!("0x2fa5e5f18f6027a6501bec864564472a616b2e274a41211a444cbe3a99f3cc61"),
+            to_node!("0x0e884376d0d8fd21ecb780389e941f66e45e7acce3e228ab3e2156a614fcd747"),
+            to_node!("0x1b7201da72494f1e28717ad1a52eb469f95892f957713533de6175e5da190af2"),
+            to_node!("0x1f8d8822725e36385200c0b201249819a6e6e1e4650808b5bebc6bface7d7636"),
+            to_node!("0x2c5d82f66c914bafb9701589ba8cfcfb6162b0a12acf88a8d0879a0471b5f85a"),
+            to_node!("0x14c54148a0940bb820957f5adf3fa1134ef5c4aaa113f4646458f270e0bfbfd0"),
+            to_node!("0x190d33b12f986f961e10c0ee44d8b9af11be25588cad89d416118e4bf4ebe80c"),
+            to_node!("0x22f98aa9ce704152ac17354914ad73ed1167ae6596af510aa5b3649325e06c92"),
+            to_node!("0x2a7c7c9b6ce5880b9f6f228d72bf6a575a526f29c66ecceef8b753d38bba7323"),
+            to_node!("0x2e8186e558698ec1c67af9c14d463ffc470043c9c2988b954d75dd643f36b992"),
+            to_node!("0x0f57c5571e9a4eab49e2c8cf050dae948aef6ead647392273546249d1c1ff10f"),
+            to_node!("0x1830ee67b5fb554ad5f63d4388800e1cfe78e310697d46e43c9ce36134f72cca"),
+            to_node!("0x2134e76ac5d21aab186c2be1dd8f84ee880a1e46eaf712f9d371b6df22191f3e"),
+            to_node!("0x19df90ec844ebc4ffeebd866f33859b0c051d8c958ee3aa88f8f8df3db91a5b1"),
+            to_node!("0x18cca2a66b5c0787981e69aefd84852d74af0e93ef4912b4648c05f722efe52b"),
+            to_node!("0x2388909415230d1b4d1304d2d54f473a628338f2efad83fadf05644549d2538d"),
+            to_node!("0x27171fb4a97b6cc0e9e8f543b5294de866a2af2c9c8d0b1d96e673e4529ed540"),
+            to_node!("0x2ff6650540f629fd5711a0bc74fc0d28dcb230b9392583e5f8d59696dde6ae21"),
+            to_node!("0x120c58f143d491e95902f7f5277778a2e0ad5168f6add75669932630ce611518"),
+            to_node!("0x1f21feb70d3f21b07bf853d5e5db03071ec495a0a565a21da2d665d279483795"),
+            to_node!("0x24be905fa71335e14c638cc0f66a8623a826e768068a9e968bb1a1dde18a72d2"),
+            to_node!("0x0f8666b62ed17491c50ceadead57d4cd597ef3821d65c328744c74e553dac26d"),
+            to_node!("0x0918d46bf52d98b034413f4a1a1c41594e7a7a3f6ae08cb43d1a2a230e1959ef"),
+            to_node!("0x1bbeb01b4c479ecde76917645e404dfa2e26f90d0afc5a65128513ad375c5ff2"),
+            to_node!("0x2f68a1c58e257e42a17a6c61dff5551ed560b9922ab119d5ac8e184c9734ead9"),
         ];
 
         for (i, zero) in tree.zeros.front.iter().enumerate() {
