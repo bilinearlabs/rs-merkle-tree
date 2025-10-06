@@ -77,3 +77,7 @@ The following benchmarks measure the disk size of each store implementation and 
 | 32 | keccak256 | rocksdb | 10.959 |
 | 32 | keccak256 | sled | 31.430 |
 | 32 | keccak256 | memory | 94.010 |
+
+## License
+
+[MIT License](https://github.com/bilinearlabs/rs-merkle-tree/blob/main/LICENSE)

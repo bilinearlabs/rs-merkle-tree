@@ -1,0 +1,75 @@
+# Main CI Rust workflow
+name: Rust Main
+
+env:
+  CARGO_TERM_COLOR: always
+
+# Run for every event affecting the main branch
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'src/**'
+      - 'tests/**'
+      - 'Cargo.**'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'src/**'
+      - 'tests/**'
+      - 'Cargo.**'
+  workflow_dispatch:
+
+jobs:
+  fmt:
+    name: Rust formatter
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Swatinem/rust-cache@v2
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt clippy
+      - name: Enforce formatting
+        run: cargo fmt --check
+  build:
+    name: Source code builder
+    needs: fmt
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Swatinem/rust-cache@v2
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt clippy
+      - name: Build
+        run: cargo check --future-incompat-report --locked
+  clippy:
+    name: Clippy linter
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Swatinem/rust-cache@v2
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt clippy
+      - name: Linting
+        run: cargo clippy --no-deps -- -D warnings
+  test:
+    name: Test & Coverage
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Swatinem/rust-cache@v2
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Install tarpaulin (coverage)
+        run: cargo install cargo-tarpaulin
+      - name: Tests
+        run: cargo test
+      - name: Generate code coverage
+        run: cargo tarpaulin --verbose --all-features --timeout 120 --out xml
