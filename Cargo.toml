@@ -2,10 +2,20 @@
 name = "rs-merkle-tree"
 version = "0.1.0"
 edition = "2021"
+resolver = "2"
 
 [lib]
 name = "rs_merkle_tree"
 path = "src/lib.rs"
+
+[features]
+all = ["all_stores"]
+default = ["memory_store"]
+all_stores = ["memory_store", "sled_store", "sqlite_store", "rocksdb_store"]
+memory_store = []
+sled_store = ["dep:sled"]
+sqlite_store = ["dep:rusqlite", "rusqlite/bundled"]
+rocksdb_store = ["dep:rocksdb"]
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["async_tokio"] }
@@ -19,13 +29,15 @@ harness = false
 
 [dependencies]
 tokio = { version = "1", features = ["full"] }
-rand = "0.8.4" # Use the latest version available
+rand = "0.8.4"                                           # Use the latest version available
 futures = "0.3"
 syn = { version = "1.0.107", features = ["full"] }
 quote = "1.0.23"
-sled = "0.34.7"
-rusqlite = { version = "0.37", features = ["bundled"] }
 tiny-keccak = { version = "2.0", features = ["keccak"] }
 byteorder = "1.4"
 thiserror = "2.0.16"
-rocksdb = "0.24"
+
+# Conditional dependencies based on features
+sled = { version = "0.34.7", optional = true }
+rusqlite = { version = "0.37", features = ["bundled"], optional = true }
+rocksdb = { version = "0.24", optional = true }

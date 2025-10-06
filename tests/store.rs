@@ -1,19 +1,30 @@
-use rs_merkle_tree::{
-    node::Node,
-    store::{MemoryStore, RocksDbStore, SledStore, SqliteStore, Store},
-    to_node,
-};
+// Copyright 2025 Bilinear Labs - MIT License
+
+use rs_merkle_tree::{node::Node, to_node, Store};
 use std::fs;
+
+#[cfg(feature = "memory_store")]
+use rs_merkle_tree::stores::MemoryStore;
+#[cfg(feature = "rocksdb_store")]
+use rs_merkle_tree::stores::RocksDbStore;
+#[cfg(feature = "sled_store")]
+use rs_merkle_tree::stores::SledStore;
+#[cfg(feature = "sqlite_store")]
+use rs_merkle_tree::stores::SqliteStore;
 
 #[test]
 fn test_stores() {
     // Test all implemented stores
-    let stores: Vec<Box<dyn Store>> = vec![
-        Box::new(MemoryStore::new()),
-        Box::new(SledStore::new("sled.db", true)),
-        Box::new(SqliteStore::new("sqlite.db")),
-        Box::new(RocksDbStore::new("rocksdb.db")),
-    ];
+    let mut stores: Vec<Box<dyn Store>> = Vec::new();
+
+    #[cfg(feature = "memory_store")]
+    stores.push(Box::new(MemoryStore::new()));
+    #[cfg(feature = "sled_store")]
+    stores.push(Box::new(SledStore::new("sled.db", true)));
+    #[cfg(feature = "sqlite_store")]
+    stores.push(Box::new(SqliteStore::new("sqlite.db")));
+    #[cfg(feature = "rocksdb_store")]
+    stores.push(Box::new(RocksDbStore::new("rocksdb.db")));
 
     for mut store in stores {
         store.put(&[(0, 0, Node::ZERO)]).unwrap();

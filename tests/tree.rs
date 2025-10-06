@@ -1,9 +1,20 @@
+// Copyright 2025 Bilinear Labs - MIT License
+
 use rs_merkle_tree::hasher::Keccak256Hasher;
-use rs_merkle_tree::store::{MemoryStore, RocksDbStore, SledStore, SqliteStore, Store};
-use rs_merkle_tree::tree::{MerkleTree, MerkleTree32};
-use rs_merkle_tree::{node::Node, to_node};
+use rs_merkle_tree::{to_node, MerkleTree, Node, Store};
 use std::fs;
 use std::path::Path;
+
+#[cfg(feature = "memory_store")]
+use rs_merkle_tree::stores::MemoryStore;
+#[cfg(feature = "rocksdb_store")]
+use rs_merkle_tree::stores::RocksDbStore;
+#[cfg(feature = "sled_store")]
+use rs_merkle_tree::stores::SledStore;
+#[cfg(feature = "sqlite_store")]
+use rs_merkle_tree::stores::SqliteStore;
+#[cfg(feature = "memory_store")]
+use rs_merkle_tree::tree::MerkleTree32;
 
 fn dir_size(path: &Path) -> u64 {
     if path.is_file() {
@@ -18,6 +29,7 @@ fn dir_size(path: &Path) -> u64 {
     size
 }
 
+#[cfg(feature = "memory_store")]
 #[test]
 fn test_merkle_tree_keccak_32_memory() {
     let mut tree: MerkleTree32 = MerkleTree::new(Keccak256Hasher, MemoryStore::new());
@@ -62,6 +74,11 @@ fn test_merkle_tree_keccak_32_memory() {
     // TODO: Once async is implemented, ensure proofs are always consistent.
 }
 
+#[cfg(any(
+    feature = "sled_store",
+    feature = "sqlite_store",
+    feature = "rocksdb_store"
+))]
 #[test]
 #[ignore = "run it on demand, slow and takes some disk space"]
 fn test_disk_space() {
@@ -98,8 +115,11 @@ fn test_disk_space() {
         print_size(db_name, db_name, (NUM_BATCHES * BATCH_SIZE) as u64);
     }
 
+    #[cfg(feature = "sled_store")]
     bench_store::<SledStore, _>("sled.db", || SledStore::new("sled.db", false));
+    #[cfg(feature = "sqlite_store")]
     bench_store::<SqliteStore, _>("sqlite.db", || SqliteStore::new("sqlite.db"));
+    #[cfg(feature = "rocksdb_store")]
     bench_store::<RocksDbStore, _>("rocksdb.db", || RocksDbStore::new("rocksdb.db"));
 }
 
