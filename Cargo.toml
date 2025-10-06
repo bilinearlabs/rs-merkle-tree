@@ -2,7 +2,6 @@
 name = "rs-merkle-tree"
 version = "0.1.0"
 edition = "2021"
-proc-macro = true
 
 [lib]
 name = "rs_merkle_tree"
