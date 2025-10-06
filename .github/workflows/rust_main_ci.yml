@@ -20,6 +20,7 @@ on:
       - 'src/**'
       - 'tests/**'
       - 'Cargo.**'
+  workflow_dispatch:
 
 jobs:
   fmt:
