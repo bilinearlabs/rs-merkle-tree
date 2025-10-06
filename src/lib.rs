@@ -19,7 +19,7 @@ rs-merkle-tree = { git = "https://github.com/bilinearlabs/rs-merkle-tree.git" }
 You can create a Merkle tree, add leaves, get the number of leaves and get the Merkle proof of a given index as
 follows. This creates a simple Merkle tree using **keccak256** hashing algorithm, a memory storage and a depth 32.
 
-```rust
+```rust,ignore
 use rs_merkle_tree::to_node;
 use rs_merkle_tree::tree::MerkleTree32;
 
@@ -35,6 +35,8 @@ fn main() {
     println!("proof: {:?}", tree.proof(0).unwrap().proof);
 }
 ```
+
+Note: This example requires the `memory_store` feature to be enabled.
 
 You can customize your tree by choosing a different store, hash function, and depth as follows. This tree also uses
 keccak256 but persists the leaves in a key-value sled store and has a depth of 32.
