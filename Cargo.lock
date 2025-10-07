@@ -1136,6 +1136,7 @@ dependencies = [
  "rusqlite",
  "sled",
  "syn 1.0.109",
+ "temp-file",
  "test-case",
  "thiserror",
  "tiny-keccak",
@@ -1323,6 +1324,12 @@ dependencies = [
  "quote",
  "unicode-ident",
 ]
+
+[[package]]
+name = "temp-file"
+version = "0.1.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b5ff282c3f91797f0acb021f3af7fffa8a78601f0f2fd0a9f79ee7dcf9a9af9e"
 
 [[package]]
 name = "tempfile"

@@ -1,7 +1,9 @@
 // Copyright 2025 Bilinear Labs - MIT License
 
 use rs_merkle_tree::{node::Node, to_node, Store};
+#[cfg(feature = "rocksdb_store")]
 use std::fs;
+use temp_file::TempFile;
 
 #[cfg(feature = "memory_store")]
 use rs_merkle_tree::stores::MemoryStore;
@@ -14,17 +16,37 @@ use rs_merkle_tree::stores::SqliteStore;
 
 #[test]
 fn test_stores() {
+    let temp_file_sqlite = TempFile::with_suffix("_sqlite.db").unwrap();
+    let path_sqlite = temp_file_sqlite
+        .path()
+        .as_os_str()
+        .to_str()
+        .expect("Failed to build path for SQLite");
+    println!("SQLite path: {}", path_sqlite);
+    let temp_file_rockdb = TempFile::with_suffix("_rocksdb.db").unwrap();
+    let path_rocksdb = temp_file_rockdb
+        .path()
+        .as_os_str()
+        .to_str()
+        .expect("Failed to build path for RocksDB")
+        .to_owned();
+    // RocksDB expects the file to not exists, so we make a temp name and force the cleanup of the file.
+    temp_file_rockdb
+        .cleanup()
+        .expect("Failed to cleanup RocksDB");
+    println!("RocksDB path: {}", path_rocksdb);
+
     // Test all implemented stores
     let mut stores: Vec<Box<dyn Store>> = Vec::new();
 
     #[cfg(feature = "memory_store")]
     stores.push(Box::new(MemoryStore::new()));
     #[cfg(feature = "sled_store")]
-    stores.push(Box::new(SledStore::new("sled.db", true)));
+    stores.push(Box::new(SledStore::new("/tmp/sled.db", true)));
     #[cfg(feature = "sqlite_store")]
-    stores.push(Box::new(SqliteStore::new("sqlite.db")));
+    stores.push(Box::new(SqliteStore::new(path_sqlite)));
     #[cfg(feature = "rocksdb_store")]
-    stores.push(Box::new(RocksDbStore::new("rocksdb.db")));
+    stores.push(Box::new(RocksDbStore::new(&path_rocksdb)));
 
     for mut store in stores {
         store.put(&[(0, 0, Node::ZERO)]).unwrap();
@@ -49,4 +71,8 @@ fn test_stores() {
             ))
         );
     }
+
+    // Now delete the RocksDB directory.
+    #[cfg(feature = "rocksdb_store")]
+    fs::remove_dir_all(path_rocksdb).expect("Failed to delete RocksDB file");
 }
