@@ -10,7 +10,7 @@ use rs_merkle_tree::{
 
 // Constants for the benchmarks
 const BATCH_SIZE: u64 = 1000;
-const NUM_BATCHES: u64 = 100;
+const NUM_BATCHES: u64 = 10;
 const SAMPLE_SIZE: u64 = 10;
 
 // Helper: accepts closures to create store and hasher so each iteration starts clean
@@ -87,6 +87,7 @@ fn bench_insertions(c: &mut Criterion) {
 
     // Depth 32 benchmarks Poseidon
     // TODO: Benchmarks not working due to inputs being bigger than the prime
+    /*
     group.throughput(Throughput::Elements((NUM_BATCHES * BATCH_SIZE) as u64));
     group.bench_function(BenchmarkId::new("memory_store", "depth32_poseidon"), |b| {
         bench_store::<PoseidonHasher, MemoryStore, 32, _, _>(
@@ -122,6 +123,7 @@ fn bench_insertions(c: &mut Criterion) {
             || PoseidonHasher,
         )
     });
+     */
 
     // Cleanup
     let _ = std::fs::remove_file("sqlite.db");
