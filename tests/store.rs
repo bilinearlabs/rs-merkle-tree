@@ -4,15 +4,36 @@ use rs_merkle_tree::{
     to_node,
 };
 use std::fs;
+use temp_file::TempFile;
 
 #[test]
 fn test_stores() {
+    let temp_file_sqlite = TempFile::with_suffix("_sqlite.db").unwrap();
+    let path_sqlite = temp_file_sqlite
+        .path()
+        .as_os_str()
+        .to_str()
+        .expect("Failed to build path for SQLite");
+    println!("SQLite path: {}", path_sqlite);
+    let temp_file_rockdb = TempFile::with_suffix("_rocksdb.db").unwrap();
+    let path_rocksdb = temp_file_rockdb
+        .path()
+        .as_os_str()
+        .to_str()
+        .expect("Failed to build path for RocksDB")
+        .to_owned();
+    // RocksDB expects the file to not exists, so we make a temp name and force the cleanup of the file.
+    temp_file_rockdb
+        .cleanup()
+        .expect("Failed to cleanup RocksDB");
+    println!("RocksDB path: {}", path_rocksdb);
+
     // Test all implemented stores
     let stores: Vec<Box<dyn Store>> = vec![
         Box::new(MemoryStore::new()),
-        Box::new(SledStore::new("sled.db", true)),
-        Box::new(SqliteStore::new("sqlite.db")),
-        Box::new(RocksDbStore::new("rocksdb.db")),
+        Box::new(SledStore::new("/tmp/sled.db", true)),
+        Box::new(SqliteStore::new(path_sqlite)),
+        Box::new(RocksDbStore::new(&path_rocksdb)),
     ];
 
     for mut store in stores {
@@ -38,4 +59,7 @@ fn test_stores() {
             ))
         );
     }
+
+    // Now delete the RocksDB directory.
+    fs::remove_dir_all(path_rocksdb).expect("Failed to delete RocksDB file");
 }
