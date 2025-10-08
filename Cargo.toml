@@ -20,7 +20,7 @@ harness = false
 
 [dependencies]
 tokio = { version = "1", features = ["full"] }
-rand = "0.8.4" # Use the latest version available
+rand = "0.9.2"
 futures = "0.3"
 syn = { version = "1.0.107", features = ["full"] }
 quote = "1.0.23"
@@ -30,3 +30,6 @@ tiny-keccak = { version = "2.0", features = ["keccak"] }
 byteorder = "1.4"
 thiserror = "2.0.16"
 rocksdb = "0.24"
+ark-bn254 = "0.5.0"
+ark-ff = "0.5.0"
+light-poseidon = "0.4"
