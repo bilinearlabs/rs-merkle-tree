@@ -3,14 +3,10 @@ use criterion::{criterion_group, criterion_main, Bencher, BenchmarkId, Criterion
 use rs_merkle_tree::store::Store;
 use rs_merkle_tree::{hasher::Keccak256Hasher, node::Node, tree::MerkleTree};
 
-#[cfg(feature = "memory_store")]
-use rs_merkle_tree::store::MemoryStore;
-#[cfg(feature = "rocksdb_store")]
-use rs_merkle_tree::store::RocksDbStore;
-#[cfg(feature = "sled_store")]
-use rs_merkle_tree::store::SledStore;
-#[cfg(feature = "sqlite_store")]
-use rs_merkle_tree::store::SqliteStore;
+use rs_merkle_tree::stores::MemoryStore;
+use rs_merkle_tree::stores::RocksDbStore;
+use rs_merkle_tree::stores::SledStore;
+use rs_merkle_tree::stores::SqliteStore;
 
 // Constants for the benchmarks
 const TOTAL_INSERTS: usize = 5_000;
@@ -44,22 +40,18 @@ fn bench_insertions(c: &mut Criterion) {
     let _ = std::fs::remove_file("rocksdb.db");
 
     // Depth 32 benchmarks
-    #[cfg(feature = "sqlite_store")]
     group.bench_function(BenchmarkId::new("sqlite_store", "depth32_keccak256"), |b| {
         let _ = std::fs::remove_file("sqlite.db");
         bench_store::<SqliteStore, 32, _>(b, || SqliteStore::new("sqlite.db"))
     });
-    #[cfg(feature = "sled_store")]
     group.bench_function(BenchmarkId::new("sled_store", "depth32_keccak256"), |b| {
         let _ = std::fs::remove_dir_all("sled.db");
         bench_store::<SledStore, 32, _>(b, || SledStore::new("sled.db", false))
     });
-    #[cfg(feature = "memory_store")]
     group.bench_function(BenchmarkId::new("memory_store", "depth32_keccak256"), |b| {
         bench_store::<MemoryStore, 32, _>(b, || MemoryStore::new())
     });
 
-    #[cfg(feature = "rocksdb_store")]
     group.bench_function(
         BenchmarkId::new("rocksdb_store", "depth32_keccak256"),
         |b| {

@@ -27,10 +27,11 @@ temp-file = "0.1.9"
 [[bench]]
 name = "benchmarks"
 harness = false
+required-features = ["all"]
 
 [dependencies]
 tokio = { version = "1", features = ["full"] }
-rand = "0.8.4"                                           # Use the latest version available
+rand = "0.8.4"
 futures = "0.3"
 syn = { version = "1.0.107", features = ["full"] }
 quote = "1.0.23"
