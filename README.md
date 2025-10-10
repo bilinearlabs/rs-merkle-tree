@@ -60,7 +60,20 @@ The following hash functions are supported:
 
 ## Benchmarks
 
-The following benchmarks measure the disk size of each store implementation and the insertion rate (in thousands per second) for appending batches of 1000 leaves to the tree. You can generate these exact tables by running `python benchmarks.py`.
+The following benchmarks measure in a MacBook Pro the following:
+* Consumed disk size
+* Leaf insertion throughput in thousands per second.
+* Merkle proof generation times.
+
+You can run them with
+```
+cargo bench --features=all
+```
+
+And you can generate the following table with this.
+```
+python benchmarks.py
+```
 
 ### Disk space usage
 
@@ -70,14 +83,23 @@ The following benchmarks measure the disk size of each store implementation and 
 | sqlite | 32 | 1000000 | 159.18 |
 | rocksdb | 32 | 1000000 | 183.27 |
 
-### Insertion throughput
+### `add_leaves` throughput
 
 | Depth | Hash | Store | Throughput (Kelem/s) |
 |---|---|---|---|
-| 32 | keccak256 | sqlite | 10.085 |
-| 32 | keccak256 | rocksdb | 10.959 |
-| 32 | keccak256 | sled | 31.430 |
-| 32 | keccak256 | memory | 94.010 |
+| 32 | keccak256 | sqlite | 10.382 |
+| 32 | keccak256 | rocksdb | 13.145 |
+| 32 | keccak256 | sled | 45.265 |
+| 32 | keccak256 | memory | 92.030 |
+
+### `proof` time
+
+| Depth | Hash | Store | Time (ms) |
+|---|---|---|---|
+| 32 | keccak256 | memory | 7.580 |
+| 32 | keccak256 | sled | 34.228 |
+| 32 | keccak256 | rocksdb | 684.170 |
+| 32 | keccak256 | sqlite | 778.840 |
 
 ## License
 

@@ -12,6 +12,12 @@ pub struct MemoryStore {
     num_leaves: u64,
 }
 
+impl MemoryStore {
+    pub fn new() -> Self {
+        Self::default()
+    }
+}
+
 impl Store for MemoryStore {
     fn get(&self, level: u32, index: u64) -> Result<Option<Node>, MerkleError> {
         // TODO: Maybe add a function to read multiple nodes at once as a batch.
