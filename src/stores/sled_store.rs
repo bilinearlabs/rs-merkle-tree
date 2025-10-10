@@ -2,9 +2,12 @@
 
 //! Sled store implementation.
 
+#[cfg(feature = "sled_store")]
 use crate::{MerkleError, Node, Store};
+#[cfg(feature = "sled_store")]
 use sled::{Batch, Db};
 
+#[cfg(feature = "sled_store")]
 pub struct SledStore {
     db: Db,
 
@@ -12,6 +15,7 @@ pub struct SledStore {
     num_leaves: u64,
 }
 
+#[cfg(feature = "sled_store")]
 impl SledStore {
     const KEY_NUM_LEAVES: &'static [u8] = b"NUM_LEAVES";
 
@@ -37,6 +41,7 @@ impl SledStore {
     }
 }
 
+#[cfg(feature = "sled_store")]
 impl SledStore {
     // TODO: Maybe return result
     pub fn new(file_path: &str, temporary: bool) -> Self {
@@ -69,6 +74,7 @@ impl SledStore {
     }
 }
 
+#[cfg(feature = "sled_store")]
 impl Store for SledStore {
     fn get(&self, level: u32, index: u64) -> Result<Option<Node>, MerkleError> {
         let key = Self::encode_key(level, index);

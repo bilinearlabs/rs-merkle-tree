@@ -2,13 +2,16 @@
 
 //! RocksDB store implementation.
 
+#[cfg(feature = "rocksdb_store")]
 use crate::{MerkleError, Node, Store};
 
+#[cfg(feature = "rocksdb_store")]
 pub struct RocksDbStore {
     db: rocksdb::DB,
     num_leaves: u64,
 }
 
+#[cfg(feature = "rocksdb_store")]
 impl RocksDbStore {
     const KEY_NUM_LEAVES: &'static [u8] = b"NUM_LEAVES";
 
@@ -55,6 +58,7 @@ impl RocksDbStore {
     }
 }
 
+#[cfg(feature = "rocksdb_store")]
 impl Store for RocksDbStore {
     fn get(&self, level: u32, index: u64) -> Result<Option<Node>, MerkleError> {
         let key = Self::encode_key(level, index);
@@ -75,7 +79,7 @@ impl Store for RocksDbStore {
 
         let counter = items.iter().filter(|(level, _, _)| *level == 0).count() as u64;
         let new_leaves = self.num_leaves + counter;
-        batch.put(Self::KEY_NUM_LEAVES, &new_leaves.to_be_bytes());
+        batch.put(Self::KEY_NUM_LEAVES, new_leaves.to_be_bytes().as_ref());
 
         self.db.write(batch).map_err(Self::db_error)?;
         self.num_leaves = new_leaves;

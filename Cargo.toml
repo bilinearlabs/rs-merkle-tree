@@ -14,7 +14,7 @@ default = ["memory_store"]
 all_stores = ["memory_store", "sled_store", "sqlite_store", "rocksdb_store"]
 memory_store = []
 sled_store = ["dep:sled"]
-sqlite_store = ["dep:rusqlite", "rusqlite/bundled"]
+sqlite_store = ["rusqlite/bundled"]
 rocksdb_store = ["dep:rocksdb"]
 
 [dev-dependencies]
@@ -31,13 +31,16 @@ required-features = ["all"]
 
 [dependencies]
 tokio = { version = "1", features = ["full"] }
-rand = "0.8.4"
+rand = "0.9.2"
 futures = "0.3"
 syn = { version = "1.0.107", features = ["full"] }
 quote = "1.0.23"
 tiny-keccak = { version = "2.0", features = ["keccak"] }
 byteorder = "1.4"
 thiserror = "2.0.16"
+ark-bn254 = "0.5.0"
+ark-ff = "0.5.0"
+light-poseidon = "0.4"
 
 # Conditional dependencies based on features
 sled = { version = "0.34.7", optional = true }

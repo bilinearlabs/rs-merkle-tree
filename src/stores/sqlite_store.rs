@@ -2,15 +2,19 @@
 
 //! SQLite store implementation.
 
+#[cfg(feature = "sqlite_store")]
 use crate::{MerkleError, Node, Store};
+#[cfg(feature = "sqlite_store")]
 use rusqlite::{params, Connection, OptionalExtension};
 
+#[cfg(feature = "sqlite_store")]
 pub struct SqliteStore {
     conn: Connection,
     // Keeping an in-memory counter to avoid querying on every access.
     num_leaves: u64,
 }
 
+#[cfg(feature = "sqlite_store")]
 impl SqliteStore {
     const KEY_NUM_LEAVES: &'static str = "NUM_LEAVES";
 
@@ -77,6 +81,7 @@ impl SqliteStore {
     }
 }
 
+#[cfg(feature = "sqlite_store")]
 impl Store for SqliteStore {
     fn get(&self, level: u32, index: u64) -> Result<Option<Node>, MerkleError> {
         let mut stmt = self
