@@ -184,6 +184,7 @@ where
         #[allow(clippy::needless_range_loop)]
         for d in 0..DEPTH {
             let sibling = if idx & 1 == 1 { idx - 1 } else { idx + 1 };
+            // TODO: Do batch reads to get all siblings at once.
             let sib_hash = self.store.get(d as u32, sibling)?.unwrap_or(self.zeros[d]);
             proof[d] = sib_hash;
             idx /= 2;

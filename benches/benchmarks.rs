@@ -135,5 +135,74 @@ fn bench_insertions(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, bench_insertions);
+fn bench_get_proof(c: &mut Criterion) {
+    let mut group = c.benchmark_group("get_proof");
+
+    group
+        .sample_size(SAMPLE_SIZE as usize)
+        .warm_up_time(std::time::Duration::from_millis(500));
+
+    // TODO: Improve the cleanups.
+    let _ = std::fs::remove_file("sqlite.db");
+    let _ = std::fs::remove_dir_all("sled.db");
+    let _ = std::fs::remove_file("rocksdb.db");
+
+    let mut memory_tree: MerkleTree<Keccak256Hasher, MemoryStore, 32> =
+        MerkleTree::new(Keccak256Hasher, MemoryStore::default());
+    let mut sqlite_tree: MerkleTree<Keccak256Hasher, SqliteStore, 32> =
+        MerkleTree::new(Keccak256Hasher, SqliteStore::new("sqlite.db"));
+    let mut sled_tree: MerkleTree<Keccak256Hasher, SledStore, 32> =
+        MerkleTree::new(Keccak256Hasher, SledStore::new("sled.db", false));
+    let mut rocksdb_tree: MerkleTree<Keccak256Hasher, RocksDbStore, 32> =
+        MerkleTree::new(Keccak256Hasher, RocksDbStore::new("rocksdb.db"));
+
+    for _ in 0..NUM_BATCHES {
+        let leaves: Vec<Node> = (0..BATCH_SIZE)
+            .map(|_| black_box(Node::random()))
+            .collect::<Vec<Node>>();
+        memory_tree.add_leaves(&leaves).unwrap();
+    }
+
+    group.bench_function(BenchmarkId::new("memory_store", "depth32_keccak256"), |b| {
+        b.iter(|| {
+            for i in 0..BATCH_SIZE * NUM_BATCHES {
+                memory_tree.proof(i).unwrap();
+            }
+        });
+    });
+
+    group.bench_function(BenchmarkId::new("sqlite_store", "depth32_keccak256"), |b| {
+        b.iter(|| {
+            for i in 0..BATCH_SIZE * NUM_BATCHES {
+                sqlite_tree.proof(i).unwrap();
+            }
+        });
+    });
+    group.bench_function(BenchmarkId::new("sled_store", "depth32_keccak256"), |b| {
+        b.iter(|| {
+            for i in 0..BATCH_SIZE * NUM_BATCHES {
+                sled_tree.proof(i).unwrap();
+            }
+        });
+    });
+    group.bench_function(
+        BenchmarkId::new("rocksdb_store", "depth32_keccak256"),
+        |b| {
+            b.iter(|| {
+                for i in 0..BATCH_SIZE * NUM_BATCHES {
+                    rocksdb_tree.proof(i).unwrap();
+                }
+            });
+        },
+    );
+
+    // Cleanup
+    let _ = std::fs::remove_file("sqlite.db");
+    let _ = std::fs::remove_dir_all("sled.db");
+    let _ = std::fs::remove_file("rocksdb.db");
+
+    group.finish();
+}
+
+criterion_group!(benches, bench_insertions, bench_get_proof);
 criterion_main!(benches);
