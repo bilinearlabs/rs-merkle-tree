@@ -118,7 +118,7 @@ where
 
             // Hash up to the root
             for level in 0..DEPTH {
-                let sibling_idx = if idx % 2 == 0 { idx + 1 } else { idx - 1 };
+                let sibling_idx = if idx & 1 == 1 { idx - 1 } else { idx + 1 };
 
                 // If cache hit
                 let sib_hash = if let Some(val) = cache.get(&(level as u32, sibling_idx)) {
@@ -129,10 +129,10 @@ where
                         .unwrap_or(self.zeros[level])
                 };
 
-                let (left, right) = if idx % 2 == 0 {
-                    (h, sib_hash)
-                } else {
+                let (left, right) = if idx & 1 == 1 {
                     (sib_hash, h)
+                } else {
+                    (h, sib_hash)
                 };
 
                 h = self.hasher.hash(&left, &right);
@@ -183,7 +183,7 @@ where
         // - Or zeros
         #[allow(clippy::needless_range_loop)]
         for d in 0..DEPTH {
-            let sibling = if idx % 2 == 0 { idx + 1 } else { idx - 1 };
+            let sibling = if idx & 1 == 1 { idx - 1 } else { idx + 1 };
             let sib_hash = self.store.get(d as u32, sibling)?.unwrap_or(self.zeros[d]);
             proof[d] = sib_hash;
             idx /= 2;
