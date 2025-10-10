@@ -161,6 +161,9 @@ fn bench_get_proof(c: &mut Criterion) {
             .map(|_| black_box(Node::random()))
             .collect::<Vec<Node>>();
         memory_tree.add_leaves(&leaves).unwrap();
+        sqlite_tree.add_leaves(&leaves).unwrap();
+        sled_tree.add_leaves(&leaves).unwrap();
+        rocksdb_tree.add_leaves(&leaves).unwrap();
     }
 
     group.bench_function(BenchmarkId::new("memory_store", "depth32_keccak256"), |b| {
