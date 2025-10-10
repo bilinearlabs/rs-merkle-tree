@@ -92,7 +92,7 @@ impl Store for SqliteStore {
             .query_row(params![level as i64, index as i64], |row| row.get(0))
             .optional()
             .map_err(Self::db_error)?;
-        Ok(res.map(|bytes| Self::decode_node(&bytes)).transpose()?)
+        res.map(|bytes| Self::decode_node(&bytes)).transpose()
     }
 
     fn put(&mut self, items: &[(u32, u64, Node)]) -> Result<(), MerkleError> {
