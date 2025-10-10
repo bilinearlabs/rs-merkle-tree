@@ -78,7 +78,7 @@ impl SledStore {
 impl Store for SledStore {
     fn get(&self, level: u32, index: u64) -> Result<Option<Node>, MerkleError> {
         let key = Self::encode_key(level, index);
-        match self.db.get(&key).map_err(Self::db_error)? {
+        match self.db.get(key).map_err(Self::db_error)? {
             None => Ok(None),
             Some(ivec) => Ok(Some(Self::decode_node(&ivec)?)),
         }
