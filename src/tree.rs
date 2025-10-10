@@ -12,21 +12,21 @@ use crate::stores::MemoryStore;
 
 pub const MAX_DEPTH: usize = 32;
 
-pub struct MerkleProof<const Depth: usize> {
-    pub proof: [Node; Depth],
+pub struct MerkleProof<const DEPTH: usize> {
+    pub proof: [Node; DEPTH],
     pub leaf: Node,
     pub index: u64,
     pub root: Node,
 }
 
-pub struct MerkleTree<H, S, const Depth: usize>
+pub struct MerkleTree<H, S, const DEPTH: usize>
 where
     H: Hasher,
     S: Store,
 {
     hasher: H,
     store: S,
-    zeros: Zeros<Depth>,
+    zeros: Zeros<DEPTH>,
 }
 
 // Type alias for common configuration
@@ -37,23 +37,23 @@ pub type MerkleTree32 = MerkleTree<Keccak256Hasher, MemoryStore, 32>;
 #[cfg(feature = "memory_store")]
 impl Default for MerkleTree32 {
     fn default() -> Self {
-        Self::new(Keccak256Hasher, MemoryStore::new())
+        Self::new(Keccak256Hasher, MemoryStore::default())
     }
 }
 
-pub struct Zeros<const Depth: usize> {
-    front: [Node; Depth],
+pub struct Zeros<const DEPTH: usize> {
+    front: [Node; DEPTH],
     last: Node,
 }
 
 // TODO: Maybe use "typenum" crate to avoid this.
-impl<const Depth: usize> Index<usize> for Zeros<Depth> {
+impl<const DEPTH: usize> Index<usize> for Zeros<DEPTH> {
     type Output = Node;
     #[inline]
     fn index(&self, index: usize) -> &Self::Output {
-        if index < Depth {
+        if index < DEPTH {
             &self.front[index]
-        } else if index == Depth {
+        } else if index == DEPTH {
             &self.last
         } else {
             panic!("index out of bounds");
@@ -63,7 +63,7 @@ impl<const Depth: usize> Index<usize> for Zeros<Depth> {
 
 // TODO: Implement send and sync so that the tree can be used in a concurrent context
 
-impl<H, S, const Depth: usize> MerkleTree<H, S, Depth>
+impl<H, S, const DEPTH: usize> MerkleTree<H, S, DEPTH>
 where
     H: Hasher,
     S: Store,
@@ -71,13 +71,13 @@ where
     pub fn new(hasher: H, store: S) -> Self {
         // TODO: Protect from overflow. Eg if depth is 256, then it will overflow.
         // Set a limit, maybe no more than 64?
-        let mut zero = [Node::ZERO; Depth];
-        for i in 1..Depth {
+        let mut zero = [Node::ZERO; DEPTH];
+        for i in 1..DEPTH {
             zero[i] = hasher.hash(&zero[i - 1], &zero[i - 1]);
         }
         let zeros = Zeros {
             front: zero,
-            last: hasher.hash(&zero[Depth - 1], &zero[Depth - 1]),
+            last: hasher.hash(&zero[DEPTH - 1], &zero[DEPTH - 1]),
         };
         Self {
             hasher,
@@ -94,17 +94,16 @@ where
 
         // Error if leaves do not fit in the tree
         // TODO: Avoid calculating this. Calculate it at init or do the shifting with the generic.
-        if self.store.get_num_leaves() + leaves.len() as u64 > (1 << Depth as u64) {
+        if self.store.get_num_leaves() + leaves.len() as u64 > (1 << DEPTH as u64) {
             return Err(MerkleError::TreeFull {
-                depth: Depth as u32,
-                capacity: 1 << Depth as u64,
-            }
-            .into());
+                depth: DEPTH as u32,
+                capacity: 1 << DEPTH as u64,
+            });
         }
 
         // Stores the levels and hashes to be written in a single batch.
         // This allows to batch all writes in a single batch transaction.
-        let mut batch: Vec<(u32, u64, Node)> = Vec::with_capacity(leaves.len() * (Depth + 1));
+        let mut batch: Vec<(u32, u64, Node)> = Vec::with_capacity(leaves.len() * (DEPTH + 1));
 
         // Cache for nodes generated in this batch so we can reuse them
         let mut cache: HashMap<(u32, u64), Node> = HashMap::new();
@@ -118,7 +117,7 @@ where
             cache.insert((0, idx), h);
 
             // Hash up to the root
-            for level in 0..Depth {
+            for level in 0..DEPTH {
                 let sibling_idx = if idx % 2 == 0 { idx + 1 } else { idx - 1 };
 
                 // If cache hit
@@ -153,11 +152,11 @@ where
     pub fn root(&self) -> Result<Node, MerkleError> {
         Ok(self
             .store
-            .get(Depth as u32, 0)?
-            .unwrap_or(self.zeros[Depth]))
+            .get(DEPTH as u32, 0)?
+            .unwrap_or(self.zeros[DEPTH]))
     }
 
-    pub fn proof(&self, leaf_idx: u64) -> Result<MerkleProof<Depth>, MerkleError> {
+    pub fn proof(&self, leaf_idx: u64) -> Result<MerkleProof<DEPTH>, MerkleError> {
         // Implementation detail. Allow proofs even beyond the number of leaves.
         // Since it has fixed depth it is technically correct.
         // Error if leaf_idx is out of bounds.
@@ -169,31 +168,28 @@ where
         //    .into());
         //}
 
-        if leaf_idx > 1 << Depth as u64 {
+        if leaf_idx > 1 << DEPTH as u64 {
             return Err(MerkleError::LeafIndexOutOfBounds {
                 index: leaf_idx,
-                num_leaves: 1 << Depth as u64,
-            }
-            .into());
+                num_leaves: 1 << DEPTH as u64,
+            });
         }
 
-        let mut proof = [Node::ZERO; Depth];
+        let mut proof = [Node::ZERO; DEPTH];
         let mut idx = leaf_idx;
 
         // Go up the root taking siblings as we go. Siblings are taken from:
         // - The store
         // - Or zeros
-        for depth in 0..Depth {
+        #[allow(clippy::needless_range_loop)]
+        for d in 0..DEPTH {
             let sibling = if idx % 2 == 0 { idx + 1 } else { idx - 1 };
-            let sib_hash = self
-                .store
-                .get(depth as u32, sibling)?
-                .unwrap_or(self.zeros[depth]);
-            proof[depth] = sib_hash;
+            let sib_hash = self.store.get(d as u32, sibling)?.unwrap_or(self.zeros[d]);
+            proof[d] = sib_hash;
             idx /= 2;
         }
 
-        Ok(MerkleProof::<Depth> {
+        Ok(MerkleProof::<DEPTH> {
             proof,
             leaf: self.store.get(0, leaf_idx)?.unwrap_or(self.zeros[0]),
             index: leaf_idx,
@@ -201,7 +197,7 @@ where
         })
     }
 
-    pub fn verify_proof(&self, proof: &MerkleProof<Depth>) -> Result<bool, MerkleError> {
+    pub fn verify_proof(&self, proof: &MerkleProof<DEPTH>) -> Result<bool, MerkleError> {
         let mut computed_hash = proof.leaf;
         for (j, sibling_hash) in proof.proof.iter().enumerate() {
             let (left, right) = if proof.index & (1 << j) == 0 {
@@ -230,7 +226,7 @@ mod tests {
     #[test]
     fn test_zero_keccak_32() {
         let hasher = Keccak256Hasher;
-        let store = MemoryStore::new();
+        let store = MemoryStore::default();
         let tree: MerkleTree32 = MerkleTree::new(hasher, store);
 
         // Test vector of expected zeros at each level.
@@ -282,7 +278,7 @@ mod tests {
     #[test]
     fn test_zero_poseidon_32() {
         let hasher = PoseidonHasher;
-        let store = MemoryStore::new();
+        let store = MemoryStore::default();
         let tree = MerkleTree::<PoseidonHasher, MemoryStore, 32>::new(hasher, store);
 
         // Test vector of expected zeros at each level.
@@ -336,7 +332,7 @@ mod tests {
     #[test]
     fn test_tree_full_error() {
         let hasher = Keccak256Hasher;
-        let store = MemoryStore::new();
+        let store = MemoryStore::default();
         let mut tree = MerkleTree::<Keccak256Hasher, MemoryStore, 3>::new(hasher, store);
 
         tree.add_leaves(&(0..8).map(|_| Node::ZERO).collect::<Vec<Node>>())

@@ -40,7 +40,7 @@ fn test_stores() {
     let mut stores: Vec<Box<dyn Store>> = Vec::new();
 
     #[cfg(feature = "memory_store")]
-    stores.push(Box::new(MemoryStore::new()));
+    stores.push(Box::new(MemoryStore::default()));
     #[cfg(feature = "sled_store")]
     stores.push(Box::new(SledStore::new("/tmp/sled.db", true)));
     #[cfg(feature = "sqlite_store")]

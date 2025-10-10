@@ -6,18 +6,10 @@ use crate::{MerkleError, Node, Store};
 use std::collections::HashMap;
 
 /// Simple in-memory store implementation using a `HashMap`.
+#[derive(Default)]
 pub struct MemoryStore {
     store: HashMap<(u32, u64), Node>,
     num_leaves: u64,
-}
-
-impl MemoryStore {
-    pub fn new() -> Self {
-        Self {
-            store: HashMap::new(),
-            num_leaves: 0,
-        }
-    }
 }
 
 impl Store for MemoryStore {

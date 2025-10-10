@@ -32,7 +32,7 @@ fn dir_size(path: &Path) -> u64 {
 #[cfg(feature = "memory_store")]
 #[test]
 fn test_merkle_tree_keccak_32_memory() {
-    let mut tree: MerkleTree32 = MerkleTree::new(Keccak256Hasher, MemoryStore::new());
+    let mut tree: MerkleTree32 = MerkleTree::new(Keccak256Hasher, MemoryStore::default());
 
     // create 10k leaves.
     let leaves = (0..10_000)
@@ -51,7 +51,7 @@ fn test_merkle_tree_keccak_32_memory() {
     );
 
     // reset the tree.
-    let mut tree: MerkleTree32 = MerkleTree::new(Keccak256Hasher, MemoryStore::new());
+    let mut tree: MerkleTree32 = MerkleTree::new(Keccak256Hasher, MemoryStore::default());
 
     // same but add them in batches of 1_000.
     for batch in leaves.chunks(1_000) {
