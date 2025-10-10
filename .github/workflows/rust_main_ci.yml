@@ -34,6 +34,52 @@ jobs:
           components: rustfmt clippy
       - name: Enforce formatting
         run: cargo fmt --check
+
+  # Feature matrix for testing different feature combinations
+  feature-test:
+    name: Feature Test - ${{ matrix.feature }}
+    runs-on: ubuntu-latest
+    needs: fmt
+    strategy:
+      matrix:
+        feature: 
+          - "default"
+          - "all"
+          - "memory_store"
+          - "sled_store"
+          - "sqlite_store"
+          - "rocksdb_store"
+          - "all_stores"
+          - "no-default-features"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Swatinem/rust-cache@v2
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt clippy
+      - name: Build with ${{ matrix.feature }}
+        run: |
+          if [ "${{ matrix.feature }}" = "no-default-features" ]; then
+            cargo check --no-default-features --future-incompat-report --locked
+          else
+            cargo check --features ${{ matrix.feature }} --future-incompat-report --locked
+          fi
+      - name: Test with ${{ matrix.feature }}
+        run: |
+          if [ "${{ matrix.feature }}" = "no-default-features" ]; then
+            cargo test --no-default-features
+          else
+            cargo test --features ${{ matrix.feature }}
+          fi
+      - name: Clippy with ${{ matrix.feature }}
+        run: |
+          if [ "${{ matrix.feature }}" = "no-default-features" ]; then
+            cargo clippy --no-default-features --no-deps -- -D warnings
+          else
+            cargo clippy --features ${{ matrix.feature }} --no-deps -- -D warnings
+          fi
+
+  # Legacy build job for compatibility
   build:
     name: Source code builder
     needs: fmt
@@ -44,8 +90,10 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt clippy
-      - name: Build
-        run: cargo check --future-incompat-report --locked
+      - name: Build with all features
+        run: cargo check --all-features --future-incompat-report --locked
+
+  # Legacy clippy job for compatibility
   clippy:
     name: Clippy linter
     needs: build
@@ -56,20 +104,21 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt clippy
-      - name: Linting
-        run: cargo clippy --no-deps -- -D warnings
+      - name: Linting with all features
+        run: cargo clippy --all-features --no-deps -- -D warnings
+
+  # Comprehensive test with all features
   test:
     name: Test & Coverage
-    needs: build
+    needs: feature-test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: Swatinem/rust-cache@v2
       - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
       - name: Install tarpaulin (coverage)
         run: cargo install cargo-tarpaulin
-      - name: Tests
-        run: cargo test
+      - name: Tests with all features
+        run: cargo test --all-features
       - name: Generate code coverage
         run: cargo tarpaulin --verbose --all-features --timeout 120 --out xml

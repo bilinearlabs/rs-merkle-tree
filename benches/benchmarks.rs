@@ -1,11 +1,13 @@
 use criterion::black_box;
 use criterion::{criterion_group, criterion_main, Bencher, BenchmarkId, Criterion, Throughput};
 use rs_merkle_tree::hasher::Hasher;
-use rs_merkle_tree::store::{MemoryStore, RocksDbStore, SledStore, SqliteStore, Store};
+use rs_merkle_tree::stores::{MemoryStore, RocksDbStore, SledStore, SqliteStore};
 use rs_merkle_tree::{
-    hasher::{Keccak256Hasher, PoseidonHasher},
+    //hasher::{Keccak256Hasher, PoseidonHasher},\
+    hasher::Keccak256Hasher,
     node::Node,
     tree::MerkleTree,
+    Store,
 };
 
 // Constants for the benchmarks

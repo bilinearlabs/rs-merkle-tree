@@ -1,12 +1,14 @@
-use crate::errors::MerkleError;
-use crate::hasher::Hasher;
-use crate::hasher::Keccak256Hasher;
-use crate::store::MemoryStore;
-use crate::store::Store;
-use crate::{node::Node, to_node};
+// Copyright 2025 Bilinear Labs - MIT License
+
+//! Merkle tree implementation.
+
+use crate::hasher::{Hasher, Keccak256Hasher};
+use crate::{MerkleError, Node, Store};
 use core::ops::Index;
 use std::collections::HashMap;
-use std::result::Result;
+
+#[cfg(feature = "memory_store")]
+use crate::stores::MemoryStore;
 
 pub const MAX_DEPTH: usize = 32;
 
@@ -28,9 +30,11 @@ where
 }
 
 // Type alias for common configuration
+#[cfg(feature = "memory_store")]
 pub type MerkleTree32 = MerkleTree<Keccak256Hasher, MemoryStore, 32>;
 
 // Default tree with common configuration
+#[cfg(feature = "memory_store")]
 impl Default for MerkleTree32 {
     fn default() -> Self {
         Self::new(Keccak256Hasher, MemoryStore::new())
@@ -220,7 +224,9 @@ mod tests {
     use crate::hasher::PoseidonHasher;
 
     use super::*;
+    use crate::to_node;
 
+    #[cfg(feature = "memory_store")]
     #[test]
     fn test_zero_keccak_32() {
         let hasher = Keccak256Hasher;
@@ -272,6 +278,7 @@ mod tests {
         assert_eq!(tree.zeros.last, expected_zeros[32]);
     }
 
+    #[cfg(feature = "memory_store")]
     #[test]
     fn test_zero_poseidon_32() {
         let hasher = PoseidonHasher;
@@ -325,6 +332,7 @@ mod tests {
         assert_eq!(tree.zeros.last, expected_zeros[32]);
     }
 
+    #[cfg(feature = "memory_store")]
     #[test]
     fn test_tree_full_error() {
         let hasher = Keccak256Hasher;
