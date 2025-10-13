@@ -76,12 +76,26 @@ impl SledStore {
 
 #[cfg(feature = "sled_store")]
 impl Store for SledStore {
-    fn get(&self, level: u32, index: u64) -> Result<Option<Node>, MerkleError> {
-        let key = Self::encode_key(level, index);
-        match self.db.get(key).map_err(Self::db_error)? {
-            None => Ok(None),
-            Some(ivec) => Ok(Some(Self::decode_node(&ivec)?)),
+    fn get(&self, levels: &[u32], indices: &[u64]) -> Result<Vec<Option<Node>>, MerkleError> {
+        if levels.len() != indices.len() {
+            return Err(MerkleError::StoreError(
+                "levels and indices must have the same length".into(),
+            ));
         }
+
+        // Sled does not support batch reads so this is exactly the same as
+        // reading the key-value one by one.
+        let mut res = Vec::with_capacity(levels.len());
+        for (&lvl, &idx) in levels.iter().zip(indices.iter()) {
+            let key = Self::encode_key(lvl, idx);
+            let opt = match self.db.get(key).map_err(Self::db_error)? {
+                None => None,
+                Some(ivec) => Some(Self::decode_node(&ivec)?),
+            };
+            res.push(opt);
+        }
+
+        Ok(res)
     }
 
     fn put(&mut self, items: &[(u32, u64, Node)]) -> Result<(), MerkleError> {

@@ -60,12 +60,31 @@ impl RocksDbStore {
 
 #[cfg(feature = "rocksdb_store")]
 impl Store for RocksDbStore {
-    fn get(&self, level: u32, index: u64) -> Result<Option<Node>, MerkleError> {
-        let key = Self::encode_key(level, index);
-        match self.db.get(key).map_err(Self::db_error)? {
-            None => Ok(None),
-            Some(value) => Ok(Some(Self::decode_node(&value)?)),
+    fn get(&self, levels: &[u32], indices: &[u64]) -> Result<Vec<Option<Node>>, MerkleError> {
+        if levels.len() != indices.len() {
+            return Err(MerkleError::StoreError(
+                "levels and indices must have the same length".into(),
+            ));
         }
+
+        let keys: Vec<Vec<u8>> = levels
+            .iter()
+            .zip(indices)
+            .map(|(&lvl, &idx)| Self::encode_key(lvl, idx).to_vec())
+            .collect();
+
+        let results = self.db.multi_get(keys);
+
+        let mut out = Vec::with_capacity(levels.len());
+        for res in results {
+            match res {
+                Ok(Some(dbvec)) => out.push(Some(Self::decode_node(&dbvec)?)),
+                Ok(None) => out.push(None),
+                Err(e) => return Err(Self::db_error(e)),
+            }
+        }
+
+        Ok(out)
     }
 
     fn put(&mut self, items: &[(u32, u64, Node)]) -> Result<(), MerkleError> {

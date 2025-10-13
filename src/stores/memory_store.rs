@@ -19,9 +19,21 @@ impl MemoryStore {
 }
 
 impl Store for MemoryStore {
-    fn get(&self, level: u32, index: u64) -> Result<Option<Node>, MerkleError> {
-        // TODO: Maybe add a function to read multiple nodes at once as a batch.
-        Ok(self.store.get(&(level, index)).cloned())
+    fn get(&self, levels: &[u32], indices: &[u64]) -> Result<Vec<Option<Node>>, MerkleError> {
+        if levels.len() != indices.len() {
+            return Err(MerkleError::StoreError(
+                "levels and indices must have the same length".into(),
+            ));
+        }
+
+        // Collect the requested nodes in order.
+        let mut result = Vec::with_capacity(levels.len());
+        for (lvl, idx) in levels.iter().zip(indices.iter()) {
+            let node = self.store.get(&(*lvl, *idx)).cloned();
+            result.push(node);
+        }
+
+        Ok(result)
     }
 
     fn put(&mut self, items: &[(u32, u64, Node)]) -> Result<(), MerkleError> {

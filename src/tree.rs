@@ -116,17 +116,47 @@ where
             batch.push((0, idx, h));
             cache.insert((0, idx), h);
 
-            // Hash up to the root
+            let mut levels_to_fetch: Vec<u32> = Vec::with_capacity(DEPTH);
+            let mut indices_to_fetch: Vec<u64> = Vec::with_capacity(DEPTH);
+
+            let mut tmp_idx = idx;
+            for lvl in 0..DEPTH {
+                let sibling_idx = if tmp_idx & 1 == 1 {
+                    tmp_idx - 1
+                } else {
+                    tmp_idx + 1
+                };
+                if !cache.contains_key(&(lvl as u32, sibling_idx)) {
+                    levels_to_fetch.push(lvl as u32);
+                    indices_to_fetch.push(sibling_idx);
+                }
+                tmp_idx /= 2;
+            }
+
+            let mut fetched_map: HashMap<(u32, u64), Node> = HashMap::new();
+            if !levels_to_fetch.is_empty() {
+                let fetched = self.store.get(&levels_to_fetch, &indices_to_fetch)?;
+                for ((lvl, idx_f), maybe_node) in levels_to_fetch
+                    .iter()
+                    .copied()
+                    .zip(indices_to_fetch.iter().copied())
+                    .zip(fetched.into_iter())
+                {
+                    if let Some(node) = maybe_node {
+                        fetched_map.insert((lvl, idx_f), node);
+                    }
+                }
+            }
+
             for level in 0..DEPTH {
                 let sibling_idx = if idx & 1 == 1 { idx - 1 } else { idx + 1 };
 
-                // If cache hit
                 let sib_hash = if let Some(val) = cache.get(&(level as u32, sibling_idx)) {
                     *val
+                } else if let Some(val) = fetched_map.get(&(level as u32, sibling_idx)) {
+                    *val
                 } else {
-                    self.store
-                        .get(level as u32, sibling_idx)?
-                        .unwrap_or(self.zeros[level])
+                    self.zeros[level]
                 };
 
                 let (left, right) = if idx & 1 == 1 {
@@ -152,7 +182,10 @@ where
     pub fn root(&self) -> Result<Node, MerkleError> {
         Ok(self
             .store
-            .get(DEPTH as u32, 0)?
+            .get(&[DEPTH as u32], &[0])?
+            .pop()
+            .unwrap_or(None)
+            // TODO: Review this
             .unwrap_or(self.zeros[DEPTH]))
     }
 
@@ -175,25 +208,40 @@ where
             });
         }
 
-        let mut proof = [Node::ZERO; DEPTH];
-        let mut idx = leaf_idx;
+        // Prepare batch read of all needed nodes (siblings + leaf)
+        let mut levels_to_fetch: Vec<u32> = Vec::with_capacity(DEPTH + 1);
+        let mut indices_to_fetch: Vec<u64> = Vec::with_capacity(DEPTH + 1);
 
-        // Go up the root taking siblings as we go. Siblings are taken from:
-        // - The store
-        // - Or zeros
-        #[allow(clippy::needless_range_loop)]
+        // Collect sibling nodes for each level
+        let mut tmp_idx = leaf_idx;
         for d in 0..DEPTH {
-            let sibling = if idx & 1 == 1 { idx - 1 } else { idx + 1 };
-            // TODO: Do batch reads to get all siblings at once.
-            // TODO: Can I shortcut to self.zeros before even trying to read from the store?
-            let sib_hash = self.store.get(d as u32, sibling)?.unwrap_or(self.zeros[d]);
-            proof[d] = sib_hash;
-            idx /= 2;
+            let sibling = if tmp_idx & 1 == 1 {
+                tmp_idx - 1
+            } else {
+                tmp_idx + 1
+            };
+            levels_to_fetch.push(d as u32);
+            indices_to_fetch.push(sibling);
+            tmp_idx /= 2;
         }
+
+        // Finally, fetch the leaf itself (level 0)
+        levels_to_fetch.push(0);
+        indices_to_fetch.push(leaf_idx);
+
+        let fetched = self.store.get(&levels_to_fetch, &indices_to_fetch)?;
+
+        // Split fetched results into proof siblings and leaf
+        let mut proof = [Node::ZERO; DEPTH];
+        for (d, fetched_opt) in fetched.iter().take(DEPTH).enumerate() {
+            proof[d] = fetched_opt.unwrap_or(self.zeros[d]);
+        }
+
+        let leaf_hash_opt = fetched.last().copied().flatten();
 
         Ok(MerkleProof::<DEPTH> {
             proof,
-            leaf: self.store.get(0, leaf_idx)?.unwrap_or(self.zeros[0]),
+            leaf: leaf_hash_opt.unwrap_or(self.zeros[0]),
             index: leaf_idx,
             root: self.root()?,
         })

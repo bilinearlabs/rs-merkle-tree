@@ -83,16 +83,61 @@ impl SqliteStore {
 
 #[cfg(feature = "sqlite_store")]
 impl Store for SqliteStore {
-    fn get(&self, level: u32, index: u64) -> Result<Option<Node>, MerkleError> {
-        let mut stmt = self
-            .conn
-            .prepare("SELECT node FROM nodes WHERE level = ?1 AND idx = ?2")
+    fn get(&self, levels: &[u32], indices: &[u64]) -> Result<Vec<Option<Node>>, MerkleError> {
+        if levels.len() != indices.len() {
+            return Err(MerkleError::StoreError(
+                "levels and indices must have the same length".into(),
+            ));
+        }
+
+        if levels.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        // TODO: All this is a bit messy. Try to abstract away the order so that i dont have
+        // to care here to order the results.
+        let mut sql = String::from("SELECT level, idx, node FROM nodes WHERE (level, idx) IN (");
+        for i in 0..levels.len() {
+            if i > 0 {
+                sql.push(',');
+            }
+            sql.push_str("(?, ?)");
+        }
+        sql.push(')');
+
+        let mut stmt = self.conn.prepare_cached(&sql).map_err(Self::db_error)?;
+
+        // Build param list interleaving level and idx as i64
+        let mut binds: Vec<i64> = Vec::with_capacity(levels.len() * 2);
+        for (&lvl, &idx) in levels.iter().zip(indices.iter()) {
+            binds.push(lvl as i64);
+            binds.push(idx as i64);
+        }
+
+        use std::collections::HashMap;
+        let mut map: HashMap<(u32, u64), Node> = HashMap::with_capacity(levels.len());
+
+        let rows_iter = stmt
+            .query_map(rusqlite::params_from_iter(binds.iter()), |row| {
+                let l: i64 = row.get(0)?;
+                let i: i64 = row.get(1)?;
+                let blob: Vec<u8> = row.get(2)?;
+                Ok(((l as u32, i as u64), blob))
+            })
             .map_err(Self::db_error)?;
-        let res: Option<Vec<u8>> = stmt
-            .query_row(params![level as i64, index as i64], |row| row.get(0))
-            .optional()
-            .map_err(Self::db_error)?;
-        res.map(|bytes| Self::decode_node(&bytes)).transpose()
+
+        for pair in rows_iter {
+            let ((l, i), blob) = pair.map_err(Self::db_error)?;
+            let node = Self::decode_node(&blob)?;
+            map.insert((l, i), node);
+        }
+
+        // Build result vector in the same order as the inputs.
+        Ok(levels
+            .iter()
+            .zip(indices.iter())
+            .map(|(&l, &i)| map.get(&(l, i)).copied())
+            .collect())
     }
 
     fn put(&mut self, items: &[(u32, u64, Node)]) -> Result<(), MerkleError> {
