@@ -1,44 +1,13 @@
 use criterion::black_box;
-use criterion::{criterion_group, criterion_main, Bencher, BenchmarkId, Criterion, Throughput};
-use rs_merkle_tree::hasher::Hasher;
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use rand::random;
 use rs_merkle_tree::stores::{MemoryStore, RocksDbStore, SledStore, SqliteStore};
-use rs_merkle_tree::{
-    //hasher::{Keccak256Hasher, PoseidonHasher},\
-    hasher::Keccak256Hasher,
-    node::Node,
-    tree::MerkleTree,
-    Store,
-};
+use rs_merkle_tree::{hasher::Keccak256Hasher, node::Node, tree::MerkleTree};
 
 // Constants for the benchmarks
 const BATCH_SIZE: u64 = 1000;
 const NUM_BATCHES: u64 = 10;
 const SAMPLE_SIZE: u64 = 10;
-
-// Helper: accepts closures to create store and hasher so each iteration starts clean
-fn bench_store<H, S, const DEPTH: usize, F1, F2>(
-    b: &mut Bencher,
-    mut make_store: F1,
-    mut make_hasher: F2,
-) where
-    H: Hasher,
-    S: Store,
-    F1: FnMut() -> S,
-    F2: FnMut() -> H,
-{
-    let mut tree: MerkleTree<H, S, DEPTH> = MerkleTree::new(make_hasher(), make_store());
-
-    // TODO: Not the best benchmarks, not all inserts are equally expensive.
-
-    b.iter(|| {
-        for _ in 0..NUM_BATCHES {
-            let leaves: Vec<Node> = (0..BATCH_SIZE)
-                .map(|_| black_box(Node::random()))
-                .collect::<Vec<Node>>();
-            tree.add_leaves(&leaves).unwrap();
-        }
-    });
-}
 
 fn bench_insertions(c: &mut Criterion) {
     let mut group = c.benchmark_group("inserts");
@@ -47,43 +16,68 @@ fn bench_insertions(c: &mut Criterion) {
         .sample_size(SAMPLE_SIZE as usize)
         .warm_up_time(std::time::Duration::from_millis(500));
 
+    // TODO: Add benchmarks for different batch sizes
+
+    // TODO: Improve the cleanups.
+    let _ = std::fs::remove_file("sqlite.db");
+    let _ = std::fs::remove_dir_all("sled.db");
+    let _ = std::fs::remove_file("rocksdb.db");
+
+    let mut memory_tree: MerkleTree<Keccak256Hasher, MemoryStore, 32> =
+        MerkleTree::new(Keccak256Hasher, MemoryStore::default());
+    let mut sqlite_tree: MerkleTree<Keccak256Hasher, SqliteStore, 32> =
+        MerkleTree::new(Keccak256Hasher, SqliteStore::new("sqlite.db"));
+    let mut sled_tree: MerkleTree<Keccak256Hasher, SledStore, 32> =
+        MerkleTree::new(Keccak256Hasher, SledStore::new("sled.db", false));
+    let mut rocksdb_tree: MerkleTree<Keccak256Hasher, RocksDbStore, 32> =
+        MerkleTree::new(Keccak256Hasher, RocksDbStore::new("rocksdb.db"));
+
     // Depth 32 benchmarks Keccak256
     group.throughput(Throughput::Elements((NUM_BATCHES * BATCH_SIZE) as u64));
     group.bench_function(BenchmarkId::new("memory_store", "depth32_keccak256"), |b| {
-        bench_store::<Keccak256Hasher, MemoryStore, 32, _, _>(
-            b,
-            || MemoryStore::new(),
-            || Keccak256Hasher,
-        )
+        b.iter(|| {
+            for _ in 0..NUM_BATCHES {
+                let leaves: Vec<Node> = (0..BATCH_SIZE)
+                    .map(|_| black_box(Node::random()))
+                    .collect::<Vec<Node>>();
+                memory_tree.add_leaves(&leaves).unwrap();
+            }
+        });
     });
     group.throughput(Throughput::Elements((NUM_BATCHES * BATCH_SIZE) as u64));
     group.bench_function(BenchmarkId::new("sqlite_store", "depth32_keccak256"), |b| {
-        let _ = std::fs::remove_file("sqlite.db");
-        bench_store::<Keccak256Hasher, SqliteStore, 32, _, _>(
-            b,
-            || SqliteStore::new("sqlite.db"),
-            || Keccak256Hasher,
-        )
+        b.iter(|| {
+            for _ in 0..NUM_BATCHES {
+                let leaves: Vec<Node> = (0..BATCH_SIZE)
+                    .map(|_| black_box(Node::random()))
+                    .collect::<Vec<Node>>();
+                sqlite_tree.add_leaves(&leaves).unwrap();
+            }
+        });
     });
     group.throughput(Throughput::Elements((NUM_BATCHES * BATCH_SIZE) as u64));
     group.bench_function(BenchmarkId::new("sled_store", "depth32_keccak256"), |b| {
-        let _ = std::fs::remove_dir_all("sled.db");
-        bench_store::<Keccak256Hasher, SledStore, 32, _, _>(
-            b,
-            || SledStore::new("sled.db", false),
-            || Keccak256Hasher,
-        )
+        b.iter(|| {
+            for _ in 0..NUM_BATCHES {
+                let leaves: Vec<Node> = (0..BATCH_SIZE)
+                    .map(|_| black_box(Node::random()))
+                    .collect::<Vec<Node>>();
+                sled_tree.add_leaves(&leaves).unwrap();
+            }
+        });
     });
     group.throughput(Throughput::Elements((NUM_BATCHES * BATCH_SIZE) as u64));
     group.bench_function(
         BenchmarkId::new("rocksdb_store", "depth32_keccak256"),
         |b| {
-            let _ = std::fs::remove_file("rocksdb.db");
-            bench_store::<Keccak256Hasher, RocksDbStore, 32, _, _>(
-                b,
-                || RocksDbStore::new("rocksdb.db"),
-                || Keccak256Hasher,
-            )
+            b.iter(|| {
+                for _ in 0..NUM_BATCHES {
+                    let leaves: Vec<Node> = (0..BATCH_SIZE)
+                        .map(|_| black_box(Node::random()))
+                        .collect::<Vec<Node>>();
+                    rocksdb_tree.add_leaves(&leaves).unwrap();
+                }
+            });
         },
     );
 
@@ -168,33 +162,29 @@ fn bench_get_proof(c: &mut Criterion) {
 
     group.bench_function(BenchmarkId::new("memory_store", "depth32_keccak256"), |b| {
         b.iter(|| {
-            for i in 0..BATCH_SIZE * NUM_BATCHES {
-                memory_tree.proof(i).unwrap();
-            }
+            let i = random::<u64>() % (BATCH_SIZE * NUM_BATCHES);
+            memory_tree.proof(i).unwrap();
         });
     });
 
     group.bench_function(BenchmarkId::new("sqlite_store", "depth32_keccak256"), |b| {
         b.iter(|| {
-            for i in 0..BATCH_SIZE * NUM_BATCHES {
-                sqlite_tree.proof(i).unwrap();
-            }
+            let i = random::<u64>() % (BATCH_SIZE * NUM_BATCHES);
+            sqlite_tree.proof(i).unwrap();
         });
     });
     group.bench_function(BenchmarkId::new("sled_store", "depth32_keccak256"), |b| {
         b.iter(|| {
-            for i in 0..BATCH_SIZE * NUM_BATCHES {
-                sled_tree.proof(i).unwrap();
-            }
+            let i = random::<u64>() % (BATCH_SIZE * NUM_BATCHES);
+            sled_tree.proof(i).unwrap();
         });
     });
     group.bench_function(
         BenchmarkId::new("rocksdb_store", "depth32_keccak256"),
         |b| {
             b.iter(|| {
-                for i in 0..BATCH_SIZE * NUM_BATCHES {
-                    rocksdb_tree.proof(i).unwrap();
-                }
+                let i = random::<u64>() % (BATCH_SIZE * NUM_BATCHES);
+                rocksdb_tree.proof(i).unwrap();
             });
         },
     );
