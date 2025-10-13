@@ -78,6 +78,47 @@ def _bench_table(rows: List[BenchRow]) -> str:
     )
     return f"{header}\n{body}"
 
+# depth, hash, store, time_ms
+ProofRow = Tuple[int, str, str, float]
+
+# "get_proof/sqlite_store/depth32_keccak256"
+_PROOF_NAME_RE = re.compile(
+    r"get_proof/(?P<store>[a-zA-Z0-9]+)_store/" r"depth(?P<depth>\d+)_(?P<hash>[a-zA-Z0-9]+)")
+# "time:   [7.8148 ms 7.8307 ms 7.8462 ms]"
+_TIME_RE = re.compile(
+    r"time:\s*\[\s*(?P<low>[\d.]+)\s+ms\s+(?P<mid>[\d.]+)\s+ms\s+(?P<high>[\d.]+)\s+ms")
+
+
+def _parse_proof(lines: Iterable[str]) -> List[ProofRow]:
+    rows: List[ProofRow] = []
+    current: tuple[int, str, str] | None = None  # depth, hash, store
+
+    for line in lines:
+        if m := _PROOF_NAME_RE.search(line):
+            store = m.group("store")
+            depth = int(m.group("depth"))
+            hash_alg = m.group("hash")
+            current = (depth, hash_alg, store)
+            continue
+
+        if current and (time_m := _TIME_RE.search(line)):
+            time_ms = float(time_m.group("mid"))
+            depth, hash_alg, store = current
+            rows.append((depth, hash_alg, store, time_ms))
+            current = None
+
+    rows.sort(key=lambda row: row[3])  # fastest (lowest ms) first
+    return rows
+
+
+def _proof_table(rows: List[ProofRow]) -> str:
+    header = "| Depth | Hash | Store | Time (ms) |\n" + "|---|---|---|---|"
+    body = "\n".join(
+        f"| {depth} | {hash_alg} | {store} | {time_ms:.3f} |"
+        for depth, hash_alg, store, time_ms in rows
+    )
+    return f"{header}\n{body}"
+
 def _run(cmd: str | list[str]) -> list[str]:
     if isinstance(cmd, str):
         full_cmd = cmd
@@ -103,12 +144,19 @@ def main() -> None:
         print()
 
     # Run benches
-    bench_lines = _run("cargo bench")
+    bench_lines = _run("cargo bench --features all")
 
     bench_rows = _parse_bench(bench_lines)
     if bench_rows:
-        print("### Insertion throughput\n")
+        # TODO: Add to the table the batch size. Use different batch sizes.
+        print("### `add_leaves` throughput\n")
         print(_bench_table(bench_rows))
+        print()
+
+    proof_rows = _parse_proof(bench_lines)
+    if proof_rows:
+        print("### `proof` time\n")
+        print(_proof_table(proof_rows))
 
 
 if __name__ == "__main__":
