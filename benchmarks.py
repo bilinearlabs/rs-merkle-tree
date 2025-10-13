@@ -86,7 +86,10 @@ _PROOF_NAME_RE = re.compile(
     r"get_proof/(?P<store>[a-zA-Z0-9]+)_store/" r"depth(?P<depth>\d+)_(?P<hash>[a-zA-Z0-9]+)")
 # "time:   [7.8148 ms 7.8307 ms 7.8462 ms]"
 _TIME_RE = re.compile(
-    r"time:\s*\[\s*(?P<low>[\d.]+)\s+ms\s+(?P<mid>[\d.]+)\s+ms\s+(?P<high>[\d.]+)\s+ms")
+    r"time:\s*\[\s*(?P<low>[\d.]+)\s+(?P<unit>ns|us|µs|ms|s)\s+"
+    r"(?P<mid>[\d.]+)\s+\w+\s+(?P<high>[\d.]+)\s+\w+",
+    re.IGNORECASE,
+)
 
 
 def _parse_proof(lines: Iterable[str]) -> List[ProofRow]:
@@ -102,7 +105,17 @@ def _parse_proof(lines: Iterable[str]) -> List[ProofRow]:
             continue
 
         if current and (time_m := _TIME_RE.search(line)):
-            time_ms = float(time_m.group("mid"))
+            mid_val = float(time_m.group("mid"))
+            unit = time_m.group("unit").lower()
+            # Convert to milliseconds
+            factor = {
+                "ns": 1e-6,
+                "us": 1e-3,
+                "µs": 1e-3,
+                "ms": 1.0,
+                "s": 1000.0,
+            }[unit]
+            time_ms = mid_val * factor
             depth, hash_alg, store = current
             rows.append((depth, hash_alg, store, time_ms))
             current = None
@@ -112,11 +125,23 @@ def _parse_proof(lines: Iterable[str]) -> List[ProofRow]:
 
 
 def _proof_table(rows: List[ProofRow]) -> str:
-    header = "| Depth | Hash | Store | Time (ms) |\n" + "|---|---|---|---|"
-    body = "\n".join(
-        f"| {depth} | {hash_alg} | {store} | {time_ms:.3f} |"
-        for depth, hash_alg, store, time_ms in rows
-    )
+    def _best_unit(time_ms: float) -> tuple[float, str]:
+        """Return value and unit chosen to keep number in readable range."""
+        if time_ms >= 1000:
+            return time_ms / 1000.0, "s"
+        if time_ms >= 1:
+            return time_ms, "ms"
+        if time_ms >= 1e-3:
+            return time_ms * 1000.0, "µs"
+        return time_ms * 1_000_000.0, "ns"
+
+    header = "| Depth | Hash | Store | Time |\n" + "|---|---|---|---|"
+    lines: list[str] = []
+    for depth, hash_alg, store, time_ms in rows:
+        val, unit = _best_unit(time_ms)
+        lines.append(f"| {depth} | {hash_alg} | {store} | {val:.3f} {unit} |")
+
+    body = "\n".join(lines)
     return f"{header}\n{body}"
 
 def _run(cmd: str | list[str]) -> list[str]:
