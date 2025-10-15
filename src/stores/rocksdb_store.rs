@@ -67,24 +67,24 @@ impl Store for RocksDbStore {
             ));
         }
 
-        let keys: Vec<Vec<u8>> = levels
+        let keys: Vec<[u8; 12]> = levels
             .iter()
             .zip(indices)
-            .map(|(&lvl, &idx)| Self::encode_key(lvl, idx).to_vec())
+            .map(|(&lvl, &idx)| Self::encode_key(lvl, idx))
             .collect();
 
-        let results = self.db.multi_get(keys);
+        let result: Result<Vec<Option<Node>>, MerkleError> = self
+            .db
+            .multi_get(keys.iter())
+            .into_iter()
+            .map(|res| match res {
+                Ok(Some(slice)) => Self::decode_node(&slice).map(Some),
+                Ok(None) => Ok(None),
+                Err(e) => Err(Self::db_error(e)),
+            })
+            .collect();
 
-        let mut out = Vec::with_capacity(levels.len());
-        for res in results {
-            match res {
-                Ok(Some(dbvec)) => out.push(Some(Self::decode_node(&dbvec)?)),
-                Ok(None) => out.push(None),
-                Err(e) => return Err(Self::db_error(e)),
-            }
-        }
-
-        Ok(out)
+        result
     }
 
     fn put(&mut self, items: &[(u32, u64, Node)]) -> Result<(), MerkleError> {

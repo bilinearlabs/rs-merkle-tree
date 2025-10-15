@@ -26,12 +26,13 @@ impl Store for MemoryStore {
             ));
         }
 
-        // Collect the requested nodes in order.
-        let mut result = Vec::with_capacity(levels.len());
-        for (lvl, idx) in levels.iter().zip(indices.iter()) {
-            let node = self.store.get(&(*lvl, *idx)).cloned();
-            result.push(node);
-        }
+        // The memory store doesnt really allow batch reads, so just get all the
+        // indexes/levels one by one.
+        let result = levels
+            .iter()
+            .zip(indices)
+            .map(|(&lvl, &idx)| self.store.get(&(lvl, idx)).cloned())
+            .collect();
 
         Ok(result)
     }

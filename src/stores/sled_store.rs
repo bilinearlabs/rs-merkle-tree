@@ -83,19 +83,20 @@ impl Store for SledStore {
             ));
         }
 
-        // Sled does not support batch reads so this is exactly the same as
-        // reading the key-value one by one.
-        let mut res = Vec::with_capacity(levels.len());
-        for (&lvl, &idx) in levels.iter().zip(indices.iter()) {
-            let key = Self::encode_key(lvl, idx);
-            let opt = match self.db.get(key).map_err(Self::db_error)? {
-                None => None,
-                Some(ivec) => Some(Self::decode_node(&ivec)?),
-            };
-            res.push(opt);
-        }
+        // Sled doest not allow batch read. So this just gets all the nodes one by one.
+        let result: Result<Vec<Option<Node>>, MerkleError> = levels
+            .iter()
+            .zip(indices)
+            .map(|(&lvl, &idx)| {
+                let key = Self::encode_key(lvl, idx);
+                match self.db.get(key).map_err(Self::db_error)? {
+                    None => Ok(None),
+                    Some(ivec) => Self::decode_node(&ivec).map(Some),
+                }
+            })
+            .collect();
 
-        Ok(res)
+        result
     }
 
     fn put(&mut self, items: &[(u32, u64, Node)]) -> Result<(), MerkleError> {

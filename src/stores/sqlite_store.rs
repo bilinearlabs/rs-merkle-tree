@@ -29,6 +29,29 @@ impl SqliteStore {
         Ok(Node::from(arr))
     }
 
+    // Simple tool to help generating the sql query.
+    // If the input is levels=[33, 34], indices=[10, 20], the output will be:
+    // sql="(?, ?, ?),(?, ?, ?)"
+    // binds=[33, 10, 0, 34, 20, 1]
+    // Note that in binds the 0 and 1 which is just a monotonic counter.
+    fn build_values_sql_and_binds(levels: &[u32], indices: &[u64]) -> (String, Vec<i64>) {
+        const PARAMS_PER_KEY: usize = 3;
+        let mut binds = Vec::with_capacity(levels.len() * PARAMS_PER_KEY);
+
+        let sql = levels
+            .iter()
+            .zip(indices)
+            .enumerate()
+            .map(|(ord, (&lvl, &idx))| {
+                binds.extend([lvl as i64, idx as i64, ord as i64]);
+                "(?, ?, ?)".to_string()
+            })
+            .collect::<Vec<_>>()
+            .join(",");
+
+        (sql, binds)
+    }
+
     // Use ":memory:" for in-memory database.
     pub fn new(file_path: &str) -> Self {
         let conn = Connection::open(file_path).expect("failed to open sqlite DB");
@@ -94,50 +117,35 @@ impl Store for SqliteStore {
             return Ok(Vec::new());
         }
 
-        // TODO: All this is a bit messy. Try to abstract away the order so that i dont have
-        // to care here to order the results.
-        let mut sql = String::from("SELECT level, idx, node FROM nodes WHERE (level, idx) IN (");
-        for i in 0..levels.len() {
-            if i > 0 {
-                sql.push(',');
-            }
-            sql.push_str("(?, ?)");
+        // Restrict to 256 elements to avoid SQLite parameter limit.
+        // Practically this should never happen.
+        if levels.len() > 256 {
+            return Err(MerkleError::StoreError(
+                "levels length must be less than 256".into(),
+            ));
         }
-        sql.push(')');
+
+        let (values_sql, binds) = Self::build_values_sql_and_binds(levels, indices);
+
+        let sql = format!(
+            "WITH req(level, idx, ord) AS (VALUES {values}) \
+             SELECT node FROM req LEFT JOIN nodes USING(level, idx) ORDER BY ord",
+            values = values_sql
+        );
 
         let mut stmt = self.conn.prepare_cached(&sql).map_err(Self::db_error)?;
 
-        // Build param list interleaving level and idx as i64
-        let mut binds: Vec<i64> = Vec::with_capacity(levels.len() * 2);
-        for (&lvl, &idx) in levels.iter().zip(indices.iter()) {
-            binds.push(lvl as i64);
-            binds.push(idx as i64);
-        }
-
-        use std::collections::HashMap;
-        let mut map: HashMap<(u32, u64), Node> = HashMap::with_capacity(levels.len());
-
-        let rows_iter = stmt
-            .query_map(rusqlite::params_from_iter(binds.iter()), |row| {
-                let l: i64 = row.get(0)?;
-                let i: i64 = row.get(1)?;
-                let blob: Vec<u8> = row.get(2)?;
-                Ok(((l as u32, i as u64), blob))
+        let rows = stmt
+            .query_map(rusqlite::params_from_iter(binds), |row| {
+                row.get::<_, Option<Vec<u8>>>(0)
             })
             .map_err(Self::db_error)?;
 
-        for pair in rows_iter {
-            let ((l, i), blob) = pair.map_err(Self::db_error)?;
-            let node = Self::decode_node(&blob)?;
-            map.insert((l, i), node);
-        }
-
-        // Build result vector in the same order as the inputs.
-        Ok(levels
-            .iter()
-            .zip(indices.iter())
-            .map(|(&l, &i)| map.get(&(l, i)).copied())
-            .collect())
+        rows.map(|row| {
+            row.map_err(Self::db_error)
+                .and_then(|opt_blob| opt_blob.map(|b| Self::decode_node(&b)).transpose())
+        })
+        .collect::<Result<Vec<_>, _>>()
     }
 
     fn put(&mut self, items: &[(u32, u64, Node)]) -> Result<(), MerkleError> {
@@ -175,5 +183,17 @@ impl Store for SqliteStore {
 
     fn get_num_leaves(&self) -> u64 {
         self.num_leaves
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn build_values_helper_smoke() {
+        let (sql, binds) = SqliteStore::build_values_sql_and_binds(&[33, 34], &[10, 20]);
+        assert_eq!(sql, "(?, ?, ?),(?, ?, ?)");
+        assert_eq!(binds, vec![33, 10, 0, 34, 20, 1]);
     }
 }
