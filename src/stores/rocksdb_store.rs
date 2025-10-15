@@ -74,7 +74,8 @@ impl Store for RocksDbStore {
             .map(|(&lvl, &idx)| Self::encode_key(lvl, idx))
             .collect();
 
-        // Using multi_get we batch all the reads in a single call.
+        // TODO: The use of multi_get to do batch reads doesn not really improve the
+        // performance. Check if there is some fine tuning in rocks db that can spped this up.
         let result: Result<Vec<Option<Node>>, MerkleError> = self
             .db
             .multi_get(keys.iter())
