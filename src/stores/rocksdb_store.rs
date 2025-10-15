@@ -73,6 +73,7 @@ impl Store for RocksDbStore {
             .map(|(&lvl, &idx)| Self::encode_key(lvl, idx))
             .collect();
 
+        // Using multi_get we batch all the reads in a single call.
         let result: Result<Vec<Option<Node>>, MerkleError> = self
             .db
             .multi_get(keys.iter())

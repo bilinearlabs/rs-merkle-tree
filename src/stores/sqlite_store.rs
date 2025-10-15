@@ -127,6 +127,9 @@ impl Store for SqliteStore {
 
         let (values_sql, binds) = Self::build_values_sql_and_binds(levels, indices);
 
+        // This query allows two things.
+        // 1. It allows to query multiple levels/indeces in a single query.
+        // 2. It returns the results in the same order as the input levels/indices.
         let sql = format!(
             "WITH req(level, idx, ord) AS (VALUES {values}) \
              SELECT node FROM req LEFT JOIN nodes USING(level, idx) ORDER BY ord",

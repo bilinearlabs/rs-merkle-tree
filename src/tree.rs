@@ -183,9 +183,9 @@ where
         Ok(self
             .store
             .get(&[DEPTH as u32], &[0])?
-            .pop()
-            .unwrap_or(None)
-            // TODO: Review this
+            .into_iter()
+            .next()
+            .ok_or_else(|| MerkleError::StoreError("root fetch returned empty vector".into()))?
             .unwrap_or(self.zeros[DEPTH]))
     }
 
@@ -208,40 +208,41 @@ where
             });
         }
 
-        // Prepare batch read of all needed nodes (siblings + leaf)
-        let mut levels_to_fetch: Vec<u32> = Vec::with_capacity(DEPTH + 1);
-        let mut indices_to_fetch: Vec<u64> = Vec::with_capacity(DEPTH + 1);
+        // Build level/index lists for siblings plus the leaf.
+        // TODO: Can't do arithmetic here with DEPTH meaning there is no
+        // easy way to put this in the stack. Unfortunately the array size
+        // has to be DEPTH + 1 to have a single read. One day Rust will
+        // have const-generic arithmetic.
+        let mut levels: Vec<u32> = Vec::with_capacity(DEPTH + 1);
+        let mut indices: Vec<u64> = Vec::with_capacity(DEPTH + 1);
 
-        // Collect sibling nodes for each level
-        let mut tmp_idx = leaf_idx;
-        for d in 0..DEPTH {
-            let sibling = if tmp_idx & 1 == 1 {
-                tmp_idx - 1
-            } else {
-                tmp_idx + 1
-            };
-            levels_to_fetch.push(d as u32);
-            indices_to_fetch.push(sibling);
-            tmp_idx /= 2;
+        let mut idx = leaf_idx;
+        for level in 0..DEPTH {
+            let sibling = if idx & 1 == 1 { idx - 1 } else { idx + 1 };
+            levels.push(level as u32);
+            indices.push(sibling);
+            idx >>= 1;
         }
 
-        // Finally, fetch the leaf itself (level 0)
-        levels_to_fetch.push(0);
-        indices_to_fetch.push(leaf_idx);
+        // Append the leaf itself at index leaf_idx.
+        levels.push(0);
+        indices.push(leaf_idx);
 
-        let fetched = self.store.get(&levels_to_fetch, &indices_to_fetch)?;
+        // Batch fetch all requested nodes.
+        let fetched = self.store.get(&levels, &indices)?;
 
-        // Split fetched results into proof siblings and leaf
+        // The first DEPTH items are the siblings.
         let mut proof = [Node::ZERO; DEPTH];
-        for (d, fetched_opt) in fetched.iter().take(DEPTH).enumerate() {
-            proof[d] = fetched_opt.unwrap_or(self.zeros[d]);
+        for (d, opt) in fetched.iter().take(DEPTH).enumerate() {
+            proof[d] = opt.unwrap_or(self.zeros[d]);
         }
 
-        let leaf_hash_opt = fetched.last().copied().flatten();
+        // The last item is the leaf itself.
+        let leaf_hash = fetched.last().copied().flatten().unwrap_or(self.zeros[0]);
 
-        Ok(MerkleProof::<DEPTH> {
+        Ok(MerkleProof {
             proof,
-            leaf: leaf_hash_opt.unwrap_or(self.zeros[0]),
+            leaf: leaf_hash,
             index: leaf_idx,
             root: self.root()?,
         })
