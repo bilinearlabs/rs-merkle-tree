@@ -1,5 +1,9 @@
 # rs-merkle-tree
 
+![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/bilinearlabs/rs-merkle-tree/rust_main_ci.yml?style=flat-square)
+![Codecov (with branch)](https://img.shields.io/codecov/c/github/bilinearlabs/rs-merkle-tree/main?token=1PIHE7U7XQ&style=flat-square)
+![GitHub License](https://img.shields.io/github/license/bilinearlabs/rs-merkle-tree?style=flat-square)
+
 Merkle tree implementation in Rust with configurable storage backends and hash functions. This Merkle tree implementation features:
 * Fixed depth: All proofs have a constant size equal to the `Depth`.
 * Append-only: Leaves are added sequentially starting at index `0`. Once added, a leaf cannot be modified.
