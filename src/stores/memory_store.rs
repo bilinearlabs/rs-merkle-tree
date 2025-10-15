@@ -21,9 +21,10 @@ impl MemoryStore {
 impl Store for MemoryStore {
     fn get(&self, levels: &[u32], indices: &[u64]) -> Result<Vec<Option<Node>>, MerkleError> {
         if levels.len() != indices.len() {
-            return Err(MerkleError::StoreError(
-                "levels and indices must have the same length".into(),
-            ));
+            return Err(MerkleError::LengthMismatch {
+                levels: levels.len(),
+                indices: indices.len(),
+            });
         }
 
         // The memory store doesnt really allow batch reads, so just get all the

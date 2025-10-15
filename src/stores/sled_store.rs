@@ -78,9 +78,10 @@ impl SledStore {
 impl Store for SledStore {
     fn get(&self, levels: &[u32], indices: &[u64]) -> Result<Vec<Option<Node>>, MerkleError> {
         if levels.len() != indices.len() {
-            return Err(MerkleError::StoreError(
-                "levels and indices must have the same length".into(),
-            ));
+            return Err(MerkleError::LengthMismatch {
+                levels: levels.len(),
+                indices: indices.len(),
+            });
         }
 
         // Sled doest not allow batch read. So this just gets all the nodes one by one.
