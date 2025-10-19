@@ -124,9 +124,10 @@ impl Store for SqliteStore {
         // Restrict to 256 elements to avoid SQLite parameter limit.
         // Practically this should never happen.
         if levels.len() > MAX_PARAMS {
-            return Err(MerkleError::StoreError(
-                format!("levels length must be less than {}", MAX_PARAMS).into(),
-            ));
+            return Err(MerkleError::StoreError(format!(
+                "levels length must be less than {}",
+                MAX_PARAMS
+            )));
         }
 
         let (values_sql, binds) = Self::build_values_sql_and_binds(levels, indices);
