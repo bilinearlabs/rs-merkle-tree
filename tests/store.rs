@@ -42,7 +42,7 @@ fn test_stores_single() {
     #[cfg(feature = "memory_store")]
     stores.push(Box::new(MemoryStore::default()));
     #[cfg(feature = "sled_store")]
-    stores.push(Box::new(SledStore::new("/tmp/sled.db", true)));
+    stores.push(Box::new(SledStore::new("/tmp/sled1.db", true)));
     #[cfg(feature = "sqlite_store")]
     stores.push(Box::new(SqliteStore::new(path_sqlite)));
     #[cfg(feature = "rocksdb_store")]
@@ -114,7 +114,7 @@ fn test_stores_multiple() {
     #[cfg(feature = "memory_store")]
     stores.push(Box::new(MemoryStore::default()));
     #[cfg(feature = "sled_store")]
-    stores.push(Box::new(SledStore::new("/tmp/sled.db", true)));
+    stores.push(Box::new(SledStore::new("/tmp/sled2.db", true)));
     #[cfg(feature = "sqlite_store")]
     stores.push(Box::new(SqliteStore::new(path_sqlite)));
     #[cfg(feature = "rocksdb_store")]

@@ -15,6 +15,9 @@ pub struct SqliteStore {
 }
 
 #[cfg(feature = "sqlite_store")]
+const MAX_PARAMS: usize = 256;
+
+#[cfg(feature = "sqlite_store")]
 impl SqliteStore {
     const KEY_NUM_LEAVES: &'static str = "NUM_LEAVES";
 
@@ -120,9 +123,9 @@ impl Store for SqliteStore {
 
         // Restrict to 256 elements to avoid SQLite parameter limit.
         // Practically this should never happen.
-        if levels.len() > 256 {
+        if levels.len() > MAX_PARAMS {
             return Err(MerkleError::StoreError(
-                "levels length must be less than 256".into(),
+                format!("levels length must be less than {}", MAX_PARAMS).into(),
             ));
         }
 

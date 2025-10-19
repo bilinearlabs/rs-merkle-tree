@@ -116,48 +116,43 @@ where
             batch.push((0, idx, h));
             cache.insert((0, idx), h);
 
-            let mut levels_to_fetch: Vec<u32> = Vec::with_capacity(DEPTH);
-            let mut indices_to_fetch: Vec<u64> = Vec::with_capacity(DEPTH);
+            // Collect siblings that are not already cached so we can fetch them in one batch.
+            let mut levels_to_fetch = [0u32; DEPTH];
+            let mut indices_to_fetch = [0u64; DEPTH];
+            let mut fetch_len = 0usize;
 
             let mut tmp_idx = idx;
             for lvl in 0..DEPTH {
-                let sibling_idx = if tmp_idx & 1 == 1 {
-                    tmp_idx - 1
-                } else {
-                    tmp_idx + 1
-                };
+                let sibling_idx = tmp_idx ^ 1;
                 if !cache.contains_key(&(lvl as u32, sibling_idx)) {
-                    levels_to_fetch.push(lvl as u32);
-                    indices_to_fetch.push(sibling_idx);
+                    levels_to_fetch[fetch_len] = lvl as u32;
+                    indices_to_fetch[fetch_len] = sibling_idx;
+                    fetch_len += 1;
                 }
-                tmp_idx /= 2;
+                tmp_idx >>= 1;
             }
 
-            let mut fetched_map: HashMap<(u32, u64), Node> = HashMap::new();
-            if !levels_to_fetch.is_empty() {
-                let fetched = self.store.get(&levels_to_fetch, &indices_to_fetch)?;
-                for ((lvl, idx_f), maybe_node) in levels_to_fetch
-                    .iter()
-                    .copied()
-                    .zip(indices_to_fetch.iter().copied())
-                    .zip(fetched.into_iter())
-                {
+            // Batch-fetch the missing siblings and insert them in cache.
+            if fetch_len != 0 {
+                let fetched = self.store.get(
+                    &levels_to_fetch[..fetch_len],
+                    &indices_to_fetch[..fetch_len],
+                )?;
+
+                for (i, maybe_node) in fetched.into_iter().enumerate() {
                     if let Some(node) = maybe_node {
-                        fetched_map.insert((lvl, idx_f), node);
+                        cache.insert((levels_to_fetch[i], indices_to_fetch[i]), node);
                     }
                 }
             }
 
             for level in 0..DEPTH {
-                let sibling_idx = if idx & 1 == 1 { idx - 1 } else { idx + 1 };
+                let sibling_idx = idx ^ 1;
 
-                let sib_hash = if let Some(val) = cache.get(&(level as u32, sibling_idx)) {
-                    *val
-                } else if let Some(val) = fetched_map.get(&(level as u32, sibling_idx)) {
-                    *val
-                } else {
-                    self.zeros[level]
-                };
+                let sib_hash = cache
+                    .get(&(level as u32, sibling_idx))
+                    .copied()
+                    .unwrap_or(self.zeros[level]);
 
                 let (left, right) = if idx & 1 == 1 {
                     (sib_hash, h)
@@ -166,7 +161,7 @@ where
                 };
 
                 h = self.hasher.hash(&left, &right);
-                idx /= 2;
+                idx >>= 1;
 
                 batch.push(((level + 1) as u32, idx, h));
                 cache.insert(((level + 1) as u32, idx), h);
@@ -218,7 +213,7 @@ where
 
         let mut idx = leaf_idx;
         for level in 0..DEPTH {
-            let sibling = if idx & 1 == 1 { idx - 1 } else { idx + 1 };
+            let sibling = idx ^ 1;
             levels.push(level as u32);
             indices.push(sibling);
             idx >>= 1;
