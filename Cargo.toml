@@ -3,6 +3,14 @@ name = "rs-merkle-tree"
 version = "0.1.0"
 edition = "2021"
 resolver = "2"
+description = "Merkle tree implementation in Rust with configurable storage backends and hash functions. Fixed depth and incremental only. Optimized for fast proof generation."
+license = "MIT"
+repository = "https://github.com/bilinearlabs/rs-merkle-tree"
+homepage = "https://www.bilinearlabs.io"
+readme = "README.md"
+keywords = ["merkle", "proof", "tree"]
+categories = ["cryptography", "data-structures"]
+exclude = ["/target/*", "/.github/*", "/**/*.svg"]
 
 [lib]
 name = "rs_merkle_tree"
