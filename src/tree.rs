@@ -10,8 +10,6 @@ use std::collections::HashMap;
 #[cfg(feature = "memory_store")]
 use crate::stores::MemoryStore;
 
-pub const MAX_DEPTH: usize = 32;
-
 pub struct MerkleProof<const DEPTH: usize> {
     pub proof: [Node; DEPTH],
     pub leaf: Node,
