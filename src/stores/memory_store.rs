@@ -19,9 +19,23 @@ impl MemoryStore {
 }
 
 impl Store for MemoryStore {
-    fn get(&self, level: u32, index: u64) -> Result<Option<Node>, MerkleError> {
-        // TODO: Maybe add a function to read multiple nodes at once as a batch.
-        Ok(self.store.get(&(level, index)).cloned())
+    fn get(&self, levels: &[u32], indices: &[u64]) -> Result<Vec<Option<Node>>, MerkleError> {
+        if levels.len() != indices.len() {
+            return Err(MerkleError::LengthMismatch {
+                levels: levels.len(),
+                indices: indices.len(),
+            });
+        }
+
+        // The memory store doesnt really allow batch reads, so just get all the
+        // indexes/levels one by one.
+        let result = levels
+            .iter()
+            .zip(indices)
+            .map(|(&lvl, &idx)| self.store.get(&(lvl, idx)).cloned())
+            .collect();
+
+        Ok(result)
     }
 
     fn put(&mut self, items: &[(u32, u64, Node)]) -> Result<(), MerkleError> {

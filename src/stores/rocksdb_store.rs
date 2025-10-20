@@ -60,12 +60,34 @@ impl RocksDbStore {
 
 #[cfg(feature = "rocksdb_store")]
 impl Store for RocksDbStore {
-    fn get(&self, level: u32, index: u64) -> Result<Option<Node>, MerkleError> {
-        let key = Self::encode_key(level, index);
-        match self.db.get(key).map_err(Self::db_error)? {
-            None => Ok(None),
-            Some(value) => Ok(Some(Self::decode_node(&value)?)),
+    fn get(&self, levels: &[u32], indices: &[u64]) -> Result<Vec<Option<Node>>, MerkleError> {
+        if levels.len() != indices.len() {
+            return Err(MerkleError::LengthMismatch {
+                levels: levels.len(),
+                indices: indices.len(),
+            });
         }
+
+        let keys: Vec<[u8; 12]> = levels
+            .iter()
+            .zip(indices)
+            .map(|(&lvl, &idx)| Self::encode_key(lvl, idx))
+            .collect();
+
+        // TODO: The use of multi_get to do batch reads doesn not really improve the
+        // performance. Check if there is some fine tuning in rocks db that can spped this up.
+        let result: Result<Vec<Option<Node>>, MerkleError> = self
+            .db
+            .multi_get(keys.iter())
+            .into_iter()
+            .map(|res| match res {
+                Ok(Some(slice)) => Self::decode_node(&slice).map(Some),
+                Ok(None) => Ok(None),
+                Err(e) => Err(Self::db_error(e)),
+            })
+            .collect();
+
+        result
     }
 
     fn put(&mut self, items: &[(u32, u64, Node)]) -> Result<(), MerkleError> {

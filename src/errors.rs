@@ -8,4 +8,7 @@ pub enum MerkleError {
 
     #[error("Tree is full: depth: {depth}, capacity: {capacity}")]
     TreeFull { depth: u32, capacity: u64 },
+
+    #[error("Levels and indices must have the same length")]
+    LengthMismatch { levels: usize, indices: usize },
 }

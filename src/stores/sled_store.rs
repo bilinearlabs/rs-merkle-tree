@@ -76,12 +76,28 @@ impl SledStore {
 
 #[cfg(feature = "sled_store")]
 impl Store for SledStore {
-    fn get(&self, level: u32, index: u64) -> Result<Option<Node>, MerkleError> {
-        let key = Self::encode_key(level, index);
-        match self.db.get(key).map_err(Self::db_error)? {
-            None => Ok(None),
-            Some(ivec) => Ok(Some(Self::decode_node(&ivec)?)),
+    fn get(&self, levels: &[u32], indices: &[u64]) -> Result<Vec<Option<Node>>, MerkleError> {
+        if levels.len() != indices.len() {
+            return Err(MerkleError::LengthMismatch {
+                levels: levels.len(),
+                indices: indices.len(),
+            });
         }
+
+        // Sled doest not allow batch read. So this just gets all the nodes one by one.
+        let result: Result<Vec<Option<Node>>, MerkleError> = levels
+            .iter()
+            .zip(indices)
+            .map(|(&lvl, &idx)| {
+                let key = Self::encode_key(lvl, idx);
+                match self.db.get(key).map_err(Self::db_error)? {
+                    None => Ok(None),
+                    Some(ivec) => Self::decode_node(&ivec).map(Some),
+                }
+            })
+            .collect();
+
+        result
     }
 
     fn put(&mut self, items: &[(u32, u64, Node)]) -> Result<(), MerkleError> {

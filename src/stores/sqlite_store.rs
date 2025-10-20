@@ -15,6 +15,9 @@ pub struct SqliteStore {
 }
 
 #[cfg(feature = "sqlite_store")]
+const MAX_PARAMS: usize = 256;
+
+#[cfg(feature = "sqlite_store")]
 impl SqliteStore {
     const KEY_NUM_LEAVES: &'static str = "NUM_LEAVES";
 
@@ -27,6 +30,29 @@ impl SqliteStore {
             .try_into()
             .map_err(|_| MerkleError::StoreError("invalid node length".into()))?;
         Ok(Node::from(arr))
+    }
+
+    // Simple tool to help generating the sql query.
+    // If the input is levels=[33, 34], indices=[10, 20], the output will be:
+    // sql="(?, ?, ?),(?, ?, ?)"
+    // binds=[33, 10, 0, 34, 20, 1]
+    // Note that in binds the 0 and 1 which is just a monotonic counter.
+    fn build_values_sql_and_binds(levels: &[u32], indices: &[u64]) -> (String, Vec<i64>) {
+        const PARAMS_PER_KEY: usize = 3;
+        let mut binds = Vec::with_capacity(levels.len() * PARAMS_PER_KEY);
+
+        let sql = levels
+            .iter()
+            .zip(indices)
+            .enumerate()
+            .map(|(ord, (&lvl, &idx))| {
+                binds.extend([lvl as i64, idx as i64, ord as i64]);
+                "(?, ?, ?)".to_string()
+            })
+            .collect::<Vec<_>>()
+            .join(",");
+
+        (sql, binds)
     }
 
     // Use ":memory:" for in-memory database.
@@ -83,16 +109,51 @@ impl SqliteStore {
 
 #[cfg(feature = "sqlite_store")]
 impl Store for SqliteStore {
-    fn get(&self, level: u32, index: u64) -> Result<Option<Node>, MerkleError> {
-        let mut stmt = self
-            .conn
-            .prepare("SELECT node FROM nodes WHERE level = ?1 AND idx = ?2")
+    fn get(&self, levels: &[u32], indices: &[u64]) -> Result<Vec<Option<Node>>, MerkleError> {
+        if levels.len() != indices.len() {
+            return Err(MerkleError::LengthMismatch {
+                levels: levels.len(),
+                indices: indices.len(),
+            });
+        }
+
+        if levels.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        // Restrict to 256 elements to avoid SQLite parameter limit.
+        // Practically this should never happen.
+        if levels.len() > MAX_PARAMS {
+            return Err(MerkleError::StoreError(format!(
+                "levels length must be less than {}",
+                MAX_PARAMS
+            )));
+        }
+
+        let (values_sql, binds) = Self::build_values_sql_and_binds(levels, indices);
+
+        // This query allows two things.
+        // 1. It allows to query multiple levels/indeces in a single query.
+        // 2. It returns the results in the same order as the input levels/indices.
+        let sql = format!(
+            "WITH req(level, idx, ord) AS (VALUES {values}) \
+             SELECT node FROM req LEFT JOIN nodes USING(level, idx) ORDER BY ord",
+            values = values_sql
+        );
+
+        let mut stmt = self.conn.prepare_cached(&sql).map_err(Self::db_error)?;
+
+        let rows = stmt
+            .query_map(rusqlite::params_from_iter(binds), |row| {
+                row.get::<_, Option<Vec<u8>>>(0)
+            })
             .map_err(Self::db_error)?;
-        let res: Option<Vec<u8>> = stmt
-            .query_row(params![level as i64, index as i64], |row| row.get(0))
-            .optional()
-            .map_err(Self::db_error)?;
-        res.map(|bytes| Self::decode_node(&bytes)).transpose()
+
+        rows.map(|row| {
+            row.map_err(Self::db_error)
+                .and_then(|opt_blob| opt_blob.map(|b| Self::decode_node(&b)).transpose())
+        })
+        .collect::<Result<Vec<_>, _>>()
     }
 
     fn put(&mut self, items: &[(u32, u64, Node)]) -> Result<(), MerkleError> {
@@ -130,5 +191,17 @@ impl Store for SqliteStore {
 
     fn get_num_leaves(&self) -> u64 {
         self.num_leaves
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn build_values_helper_smoke() {
+        let (sql, binds) = SqliteStore::build_values_sql_and_binds(&[33, 34], &[10, 20]);
+        assert_eq!(sql, "(?, ?, ?),(?, ?, ?)");
+        assert_eq!(binds, vec![33, 10, 0, 34, 20, 1]);
     }
 }
