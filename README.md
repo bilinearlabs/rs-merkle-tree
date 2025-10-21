@@ -99,7 +99,7 @@ fn main() {
 The following stores are supported:
 * [rusqlite](https://github.com/rusqlite/rusqlite)
 * [rocksdb](https://github.com/rust-rocksdb/rust-rocksdb)
-* [sled](github.com/spacejam/sled)
+* [sled](https://github.com/spacejam/sled)
 
 ## Hash functions
 
