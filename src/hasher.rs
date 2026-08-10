@@ -2,7 +2,7 @@ use crate::node::Node;
 
 use ark_bn254::Fr;
 
-use keccak_batch::{keccak256, keccak256_many};
+use keccak_batch::{keccak256, keccak256_many_into};
 use light_poseidon::{Poseidon, PoseidonBytesHasher};
 
 pub trait Hasher {
@@ -10,7 +10,7 @@ pub trait Hasher {
 
     /// Hashes `pairs[i]` into `out[i]`; `pairs` and `out` must be equally long.
     fn hash_pairs(&self, pairs: &[[Node; 2]], out: &mut [Node]) {
-        debug_assert_eq!(pairs.len(), out.len());
+        assert_eq!(pairs.len(), out.len(), "pairs and out must be equally long");
         for (parent, [left, right]) in out.iter_mut().zip(pairs) {
             *parent = self.hash(left, right);
         }
@@ -20,10 +20,16 @@ pub trait Hasher {
 /// One `left || right` message, the only shape this tree ever hashes.
 const MESSAGE: usize = 2 * Node::LEN;
 
-/// Pairs `keccak256_many` hashes per permutation: the four 64-bit SIMD lanes
-/// of a 256-bit register, each carrying one independent message.
-// TODO: This depends on the hardware. Compilation flag?
-const LANES: usize = 4;
+/// This is the biggest batch we pass to `keccak256_many_into`, but
+/// note that the function detects the widest backend the
+/// running CPU supports and splits each batch across it.
+/// This is set to 8 since is the widest batch any backend consumes, AVX-512
+/// running eight 64-bit lanes.
+/// This allows to not allocate memory in the heap, since size is known at compile
+/// time. But note that this number acts as an upper limit. A platform supporting only
+/// 4 operations in paralel, will pass `keccak256_many_into` with 8 hashes, but unthe the hood
+/// it will be split in 2 batches.
+const STAGE: usize = 8;
 
 pub struct Keccak256Hasher;
 
@@ -36,26 +42,26 @@ impl Hasher for Keccak256Hasher {
     }
 
     fn hash_pairs(&self, pairs: &[[Node; 2]], out: &mut [Node]) {
-        debug_assert_eq!(pairs.len(), out.len());
+        assert_eq!(pairs.len(), out.len(), "pairs and out must be equally long");
 
-        // A run of pairs is contiguous bytes, so every pair already sits in
-        // memory as the 64-byte message it hashes to; the batch borrows
-        // straight from the level instead of staging copies.
-        let messages = Node::as_bytes(pairs.as_flattened()).chunks_exact(LANES * MESSAGE);
-        let mut parents = out.chunks_exact_mut(LANES);
+        // For each STAGE batch
+        for (group, parents) in pairs.chunks(STAGE).zip(out.chunks_mut(STAGE)) {
+            // We need to convert to &[&[u8]], which is what keccak256_many_into
+            // accepts.
+            let mut staged: [&[u8]; STAGE] = [&[]; STAGE];
+            for (slot, pair) in staged.iter_mut().zip(group) {
+                *slot = Node::as_bytes(pair);
+            }
 
-        for (batch, parents) in messages.zip(parents.by_ref()) {
-            let inputs: [&[u8]; LANES] =
-                core::array::from_fn(|i| &batch[i * MESSAGE..(i + 1) * MESSAGE]);
-            for (parent, digest) in parents.iter_mut().zip(keccak256_many(&inputs)) {
+            // Trimming to the run length lets the last batch be short: a
+            // partial batch is split across the narrower widths, not dropped
+            // to a scalar tail.
+            let mut digests = [[0u8; Node::LEN]; STAGE];
+            keccak256_many_into(&staged[..group.len()], &mut digests[..group.len()]);
+
+            for (parent, digest) in parents.iter_mut().zip(digests) {
                 *parent = Node::from(digest);
             }
-        }
-
-        let rest = parents.into_remainder();
-        let rest_pairs = &pairs[pairs.len() - rest.len()..];
-        for (parent, [left, right]) in rest.iter_mut().zip(rest_pairs) {
-            *parent = self.hash(left, right);
         }
     }
 }
@@ -94,14 +100,15 @@ mod tests {
         );
     }
 
-    /// Every batch size around the SIMD lane count, so full batches, the
-    /// scalar remainder, and the empty run all reproduce pair-by-pair hashing.
+    /// Batch sizes either side of every SIMD width the crate dispatches to and
+    /// of the staging buffer, so full batches, short trailing batches, and the
+    /// empty run all reproduce pair-by-pair hashing.
     #[test]
     fn test_keccak256_hash_pairs_matches_hash() {
         let hasher = Keccak256Hasher;
-        let pairs: Vec<[Node; 2]> = (0..13).map(|_| [Node::random(), Node::random()]).collect();
+        let pairs: Vec<[Node; 2]> = (0..65).map(|_| [Node::random(), Node::random()]).collect();
 
-        for len in [0, 1, 3, 4, 5, 8, 13] {
+        for len in [0, 1, 2, 3, 4, 5, 7, 8, 9, 15, 16, 17, 31, 33, 64, 65] {
             let pairs = &pairs[..len];
             let mut parents = vec![Node::ZERO; len];
             hasher.hash_pairs(pairs, &mut parents);
@@ -110,6 +117,12 @@ mod tests {
                 assert_eq!(parent, &hasher.hash(left, right), "pair {i} of {len}");
             }
         }
+    }
+
+    #[test]
+    #[should_panic(expected = "pairs and out must be equally long")]
+    fn test_keccak256_hash_pairs_rejects_length_mismatch() {
+        Keccak256Hasher.hash_pairs(&[[Node::ZERO, Node::ZERO]], &mut []);
     }
 
     #[test]

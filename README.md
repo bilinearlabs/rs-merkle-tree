@@ -3,7 +3,6 @@
 ![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/bilinearlabs/rs-merkle-tree/rust_main_ci.yml?style=flat-square)
 ![Codecov (with branch)](https://img.shields.io/codecov/c/github/bilinearlabs/rs-merkle-tree/main?token=1PIHE7U7XQ&style=flat-square)
 ![GitHub License](https://img.shields.io/github/license/bilinearlabs/rs-merkle-tree?style=flat-square)
-[![Join our Discord](https://img.shields.io/badge/Discord-5865F2?logo=discord&logoColor=white&style=flat-square)](https://discord.gg/Et8BTnVBZS)
 
 Merkle tree implementation in Rust with the following features:
 * Fixed depth: All proofs have a constant size equal to the `Depth`.
@@ -110,6 +109,14 @@ fn main() {
     let mut tree: MerkleTree<Keccak256Hasher, FileStore, 32> =
         MerkleTree::new(Keccak256Hasher, FileStore::new("filestore.db"));
 }
+```
+
+## Tests
+
+
+Run all tests
+```
+cargo test --all-features
 ```
 
 ## Stores
