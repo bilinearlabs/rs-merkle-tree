@@ -9,6 +9,9 @@ pub trait Hasher {
     fn hash(&self, left: &Node, right: &Node) -> Node;
 
     /// Hashes `pairs[i]` into `out[i]`; `pairs` and `out` must be equally long.
+    /// This is a default implementation. If your hashing implementation doesnt support
+    /// vectorization, there is no need to implement this. If it does (see keccak)
+    /// you can optionally implement this, which hashes pairs faster than the naive implementation.
     fn hash_pairs(&self, pairs: &[[Node; 2]], out: &mut [Node]) {
         assert_eq!(pairs.len(), out.len(), "pairs and out must be equally long");
         for (parent, [left, right]) in out.iter_mut().zip(pairs) {
