@@ -25,6 +25,11 @@ where
     hasher: H,
     store: S,
     zeros: Zeros<DEPTH>,
+    /// Scratch buffers reused across `add_leaves` calls: one holds the run
+    /// being read, the other receives the parents it produces, swapping every
+    /// level. Kept in the tree so steady-state insertions allocate nothing;
+    /// capacity ratchets up to half the largest batch seen.
+    scratch: [Vec<Node>; 2],
 }
 
 // Type alias for common configuration
@@ -85,6 +90,7 @@ where
             hasher,
             store,
             zeros,
+            scratch: [Vec::new(), Vec::new()],
         }
     }
 
@@ -97,6 +103,9 @@ where
     /// DEPTH` hashes per call instead of `leaves * DEPTH`, so the saving grows
     /// with the batch size. Independent pairs on sufficiently large levels are
     /// hashed in parallel on Rayon's global thread pool.
+    ///
+    /// Intermediate levels live in scratch buffers owned by the tree, so a
+    /// call only allocates when `leaves` is larger than every earlier batch.
     pub fn add_leaves(&mut self, leaves: &[Node]) -> Result<(), MerkleError>
     where
         H: Sync,
@@ -147,11 +156,31 @@ where
         // The nodes this call writes at level `l` are one contiguous run
         // starting at `num_leaves >> l`, so each level goes to the store whole,
         // as the run it is, and the store never has to sort positions out.
+        // Level 0 is hashed straight out of the caller's slice; every later
+        // level reads one scratch buffer and writes the other, so no level
+        // copies its input or allocates in the steady state.
         let mut start = num_leaves;
-        let mut nodes = leaves.to_vec();
-        self.store.put(0, start, &nodes)?;
+        self.store.put(0, start, leaves)?;
+
+        // Sized once for the whole call: no parent run is longer than half
+        // the batch plus an edge node. Growing writes zeros, so this happens
+        // only until the largest batch has been seen; after that the levels
+        // below just slice these buffers and overwrite the slice in full.
+        let size = leaves.len() / 2 + 1;
+        for buf in &mut self.scratch {
+            if buf.len() < size {
+                buf.resize(size, Node::ZERO);
+            }
+        }
+
+        // How much of the run buffer the current level reads; anything beyond
+        // is stale data from earlier, larger runs.
+        let mut run_len = leaves.len();
 
         for (level, left_partner) in left_partners.iter().enumerate() {
+            let [run, parents] = &mut self.scratch;
+            let nodes: &[Node] = if level == 0 { leaves } else { &run[..run_len] };
+
             // The run pairs up as: an odd start pairs the stored left partner
             // with the first node, an odd end pairs the last node with this
             // level's zero, and everything between pairs consecutive nodes.
@@ -160,7 +189,7 @@ where
             let head = usize::from(start & 1 == 1);
             let (pairs, tail) = nodes[head..].as_chunks::<2>();
 
-            let mut parents = vec![Node::ZERO; head + pairs.len() + tail.len()];
+            let parents = &mut parents[..head + pairs.len() + tail.len()];
             if head == 1 {
                 parents[0] = self.hasher.hash(left_partner, &nodes[0]);
             }
@@ -179,8 +208,11 @@ where
             }
 
             start >>= 1;
-            nodes = parents;
-            self.store.put((level + 1) as u32, start, &nodes)?;
+            self.store.put((level + 1) as u32, start, parents)?;
+
+            // This level's parents are the run the next iteration reads.
+            run_len = parents.len();
+            self.scratch.swap(0, 1);
         }
 
         Ok(())
