@@ -25,10 +25,6 @@ where
     hasher: H,
     store: S,
     zeros: Zeros<DEPTH>,
-    /// Scratch buffers reused across `add_leaves` calls: one holds the run
-    /// being read, the other receives the parents it produces, swapping every
-    /// level. Kept in the tree so steady-state insertions allocate nothing;
-    /// capacity ratchets up to half the largest batch seen.
     scratch: [Vec<Node>; 2],
 }
 
